@@ -72,14 +72,14 @@ Prowlarr can be added for a connection test, but the delete workflow does not us
 
 ### Proxmox VE helper script
 
-The `proxmox/` folder has a [community-scripts](https://github.com/community-scripts/ProxmoxVE) style installer that creates an unprivileged Debian LXC with Node.js, builds the app and runs it as a systemd service. See [proxmox/README.md](proxmox/README.md). It is untested on a real host, and it cannot download from a private repository, so while this repo is private use the manual install.
+The `proxmox/` folder has a [community-scripts](https://github.com/community-scripts/ProxmoxVE) style installer that creates an unprivileged Debian LXC with Node.js, builds the app and runs it as a systemd service. See [proxmox/README.md](proxmox/README.md). It is untested on a real host, so expect to fix something on the first run.
 
 ### Manual
 
 Requires Node.js 20 or newer.
 
 ```bash
-git clone https://github.com/ravage484/media-middle-manager.git   # private for now: needs your GitHub login
+git clone https://github.com/ravage484/media-middle-manager.git
 cd media-middle-manager
 npm ci
 npm run build
