@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
-import { initKey, keySource, encryptSecret, decryptSecret, isEncrypted, canDecrypt, aadFor } from './secrets.js';
+import { initKey, keySource, encryptSecret, decryptSecret, decryptSecretWith, deriveKey, isEncrypted, canDecrypt, aadFor } from './secrets.js';
 
 export const DATA = process.env.DATA_DIR || path.resolve('data');
 fs.mkdirSync(DATA, { recursive: true });
@@ -131,7 +131,11 @@ const TABLES = ['services', 'history', 'users', 'sessions'];
 
 // Replaces services, history and accounts with the contents of a backup file.
 // Sessions are never restored, so tokens from an old backup cannot sign anyone in.
-export function restoreFrom(file) {
+// sourceKey (optional): the key of the install that made the backup (its secret.key, or the MMM_SECRET_KEY value).
+// It is used once to read the backup's API keys, which are re-encrypted under THIS install's key as they are copied in.
+// It is never stored or logged.
+export function restoreFrom(file, sourceKey) {
+  const srcKey = sourceKey ? deriveKey(sourceKey) : null;
   const head = Buffer.alloc(16);
   const fd = fs.openSync(file, 'r');
   try { fs.readSync(fd, head, 0, 16, 0); } finally { fs.closeSync(fd); }
@@ -149,11 +153,14 @@ export function restoreFrom(file) {
     const n = (t) => bk.prepare(`SELECT COUNT(*) AS c FROM ${t}`).get().c;
     counts = { services: n('services'), history: n('history'), users: n('users') };
     if (!counts.users) throw new Error('The backup has no user account, so you could not sign in after restoring it');
-    // Stored keys are encrypted: only accept the backup if this install's key can read them.
+    // Stored keys are encrypted: only accept the backup if the supplied key (or, if none, this install's key) can read them.
     const cant = bk.prepare('SELECT id, api_key, password FROM services').all()
-      .filter((r) => [['api_key', r.api_key], ['password', r.password]].some(([c, v]) => isEncrypted(v) && !canDecrypt(v, aadFor(r.id, c))));
+      .filter((r) => [['api_key', r.api_key], ['password', r.password]].some(([c, v]) => isEncrypted(v) && !canDecrypt(v, aadFor(r.id, c), srcKey || undefined)));
+    if (cant.length && srcKey) {
+      throw new Error('The key you entered does not match this backup. Use the secret.key (or the MMM_SECRET_KEY value) from the install that made it.');
+    }
     if (cant.length) {
-      throw new Error('The API keys in this backup were encrypted with a different key than this install uses. Copy the secret.key file (or set the MMM_SECRET_KEY value) from the install that made the backup, restart, then restore again.');
+      throw new Error('The API keys in this backup were encrypted with a different key than this install uses. Enter the key of the install that made the backup (its secret.key file, or the MMM_SECRET_KEY value) in the "Key of the backup" field and try again.');
     }
   } catch (e) {
     // Only SQLite's own errors (damaged or non-database content) get this generic message; ours pass through.
@@ -170,12 +177,24 @@ export function restoreFrom(file) {
     db.transaction(() => {
       for (const t of ['sessions', 'users', 'history', 'services']) db.exec(`DELETE FROM main.${t}`);
       db.exec('INSERT INTO main.users SELECT * FROM bk.users');
-      db.exec('INSERT INTO main.services SELECT * FROM bk.services');
+      if (srcKey) {
+        // Read each key with the supplied key and store it under this install's own key.
+        const ins = db.prepare('INSERT INTO main.services (id, position, type, name, url, api_key, username, password) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+        for (const r of db.prepare('SELECT id, position, type, name, url, api_key, username, password FROM bk.services ORDER BY position').all()) {
+          ins.run(
+            r.id, r.position, r.type, r.name, r.url,
+            encryptSecret(decryptSecretWith(srcKey, r.api_key, aadFor(r.id, 'api_key')), aadFor(r.id, 'api_key')), r.username,
+            encryptSecret(decryptSecretWith(srcKey, r.password, aadFor(r.id, 'password')), aadFor(r.id, 'password')),
+          );
+        }
+      } else {
+        db.exec('INSERT INTO main.services SELECT * FROM bk.services');
+      }
       db.exec('INSERT INTO main.history SELECT * FROM bk.history');
     })();
   } finally { db.exec('DETACH DATABASE bk'); }
   protectSecrets(); // a backup from before encryption existed still holds plain text
-  return { ...counts, safetyCopy: safety };
+  return { ...counts, safetyCopy: safety, rekeyed: !!srcKey };
 }
 
 /* ---------- one-time import of the old JSON files ---------- */

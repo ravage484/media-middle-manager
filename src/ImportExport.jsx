@@ -71,6 +71,17 @@ export default function ImportExport() {
 
   const [dbFile, setDbFile] = useState(null);
   const [dbBusy, setDbBusy] = useState(false);
+  const [srcKey, setSrcKey] = useState('');
+  const [srcKeyFile, setSrcKeyFile] = useState('');
+
+  const loadKeyFile = async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (f.size > 4096) { setMsg({ ok: false, text: 'That does not look like a key file (it is too large). Choose the secret.key file.' }); return; }
+    setSrcKey((await f.text()).trim());
+    setSrcKeyFile(f.name);
+    e.target.value = '';
+  };
 
   const downloadDb = async () => {
     setMsg(null);
@@ -91,9 +102,9 @@ export default function ImportExport() {
     if (!window.confirm('Restore this backup?\n\nThis REPLACES all services, history and accounts with the backup, and signs everyone out. A safety copy of the current database is saved first.')) return;
     setDbBusy(true); setMsg(null);
     try {
-      const r = await api.restoreDb(dbFile);
-      setMsg({ ok: true, text: `Restored ${r.services} service(s), ${r.history} history entries and ${r.users} account(s). Your previous database was saved as ${r.safetyCopy} in the data folder. Reloading, then sign in with the account from the backup…` });
-      setDbFile(null);
+      const r = await api.restoreDb(dbFile, srcKey || undefined);
+      setMsg({ ok: true, text: `Restored ${r.services} service(s), ${r.history} history entries and ${r.users} account(s).${r.rekeyed ? " The API keys were re-encrypted under this install's own key, and the key you entered was not stored." : ''} Your previous database was saved as ${r.safetyCopy} in the data folder. Reloading, then sign in with the account from the backup…` });
+      setDbFile(null); setSrcKey(''); setSrcKeyFile('');
       setTimeout(() => window.location.reload(), 2500);
     } catch (e) { setMsg({ ok: false, text: e.message }); }
     setDbBusy(false);
@@ -156,6 +167,14 @@ export default function ImportExport() {
           <input type="file" accept=".db,.sqlite,.sqlite3,application/vnd.sqlite3,application/octet-stream" onChange={(e) => { setMsg(null); setDbFile(e.target.files?.[0] || null); }} />
           {dbFile && (
             <>
+              <label>Key of the backup <span className="dim">(only if it came from another install)</span>
+                <input type="password" value={srcKey} onChange={(e) => { setSrcKey(e.target.value); setSrcKeyFile(''); }} autoComplete="off" spellCheck="false" placeholder="Paste the key, or load the secret.key file" />
+              </label>
+              <div className="keyrow">
+                <label className="filebtn">Load from secret.key<input type="file" onChange={loadKeyFile} hidden /></label>
+                {srcKeyFile && <span className="dim">Loaded {srcKeyFile}</span>}
+              </div>
+              <small className="dim">Use the <code>secret.key</code> file (or the <code>MMM_SECRET_KEY</code> value) of the install that made the backup. It is used once to read the backup's API keys, which are then re-encrypted under this install's own key. It is never stored, and no key file needs copying onto the server. Leave it empty for a backup from this same install.</small>
               <div className="notice bad">Restoring <b>replaces everything</b> (services, history and accounts) and signs everyone out. You will sign in with the account stored in the backup. A safety copy of the current database is saved in the data folder first.</div>
               <div><button className="danger" onClick={restoreDb} disabled={dbBusy}>{dbBusy ? 'Restoring…' : `Restore ${dbFile.name}`}</button></div>
             </>

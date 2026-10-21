@@ -18,11 +18,16 @@ export let keySource = null; // 'env' | 'file'
 
 export const isEncrypted = (v) => typeof v === 'string' && v.startsWith(PREFIX);
 
+// base64 of exactly 32 bytes is used as is; anything else is treated as a passphrase and stretched with scrypt.
+export function deriveKey(input) {
+  const raw = Buffer.from(String(input).trim(), 'base64');
+  return raw.length === 32 && raw.toString('base64') === String(input).trim() ? raw : crypto.scryptSync(String(input), 'media-middle-manager/v1', 32);
+}
+
 export function initKey(dataDir) {
   const env = process.env.MMM_SECRET_KEY;
   if (env) {
-    const raw = Buffer.from(env.trim(), 'base64');
-    key = raw.length === 32 && raw.toString('base64') === env.trim() ? raw : crypto.scryptSync(env, 'media-middle-manager/v1', 32);
+    key = deriveKey(env);
     keySource = 'env';
     return;
   }
@@ -44,17 +49,20 @@ export function encryptSecret(plain, aad) {
   return PREFIX + Buffer.concat([iv, c.getAuthTag(), body]).toString('base64');
 }
 
-export function decryptSecret(stored, aad) {
+// Decrypt with an explicit key (used to read a backup made under a different key).
+export function decryptSecretWith(k, stored, aad) {
   if (!isEncrypted(stored)) return stored || ''; // legacy plaintext, encrypted on the next startup
   const buf = Buffer.from(stored.slice(PREFIX.length), 'base64');
-  const d = crypto.createDecipheriv('aes-256-gcm', key, buf.subarray(0, 12));
+  const d = crypto.createDecipheriv('aes-256-gcm', k, buf.subarray(0, 12));
   d.setAuthTag(buf.subarray(12, 28));
   d.setAAD(Buffer.from(aad));
   return Buffer.concat([d.update(buf.subarray(28)), d.final()]).toString('utf8');
 }
 
-export function canDecrypt(stored, aad) {
-  try { decryptSecret(stored, aad); return true; } catch { return false; }
+export const decryptSecret = (stored, aad) => decryptSecretWith(key, stored, aad);
+
+export function canDecrypt(stored, aad, k = key) {
+  try { decryptSecretWith(k, stored, aad); return true; } catch { return false; }
 }
 
 export const aadFor = (id, column) => `service:${id}:${column}`;

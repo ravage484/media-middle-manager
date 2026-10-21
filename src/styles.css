@@ -153,6 +153,9 @@ table.list { width: 100%; border-collapse: collapse; }
 .logincard label { display: flex; flex-direction: column; gap: 4px; color: var(--dim); }
 .logincard .primary { padding: 10px; }
 .form input[type=file] { padding: 8px; }
+.keyrow { display: flex; align-items: center; gap: 10px; }
+.filebtn { display: inline-flex !important; flex-direction: row !important; width: auto; cursor: pointer; padding: 8px 12px; background: var(--panel); border: 1px solid var(--panel2); border-radius: 8px; color: var(--text) !important; }
+.filebtn:hover { background: var(--panel2); }
 .form input[type=radio] { padding: 0; }
 .dialog.small { width: min(460px, 100%); }
 .dialog.detail { width: min(860px, 100%); }

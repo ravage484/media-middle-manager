@@ -147,7 +147,7 @@ The key comes from one of two places:
 
 **What this protects, and what it does not.** The server has to decrypt the keys to use them, so encryption cannot protect against someone who controls the running app or a signed-in session. It does protect the database *on its own*: a copied `mmm.db`, a database backup, or a snapshot of the volume taken without the key. If the key is a file in the same folder, copying the whole data folder gets both, which is why the environment variable is the better choice if you care about this.
 
-**Keep the key.** Without it the stored keys cannot be recovered; you would re-enter them under Settings. The app refuses to start with a clear message if the key does not match the stored data, rather than quietly breaking every service. To move from the key file to the environment variable, set `MMM_SECRET_KEY` to the contents of `secret.key`; nothing needs re-encrypting. A database backup restores only on an install that has the same key.
+**Keep the key.** Without it the stored keys cannot be recovered; you would re-enter them under Settings. The app refuses to start with a clear message if the key does not match the stored data, rather than quietly breaking every service. To move from the key file to the environment variable, set `MMM_SECRET_KEY` to the contents of `secret.key`; nothing needs re-encrypting. A database backup from another install needs that install's key when you restore it: enter it in the restore form (see [Database backup and restore](#database-backup-and-restore)) and it is re-encrypted under this install's key.
 
 **Backing up:** use **Settings > Import / Export**. Its **Database backup** button downloads a complete, consistent copy of the database while the app is running. Copying `mmm.db` by hand is only safe with the app stopped, because recent changes can still be in the `-wal` file.
 
@@ -184,7 +184,15 @@ The same tab can take a **whole-database backup** (a `.db` file) and restore one
 | Browser preferences | yes (optional) | no |
 | Merge into an existing install | yes | no, it replaces everything |
 
-**Restoring replaces all services, history and accounts**, so you sign in afterwards with the account stored in the backup, and everyone is signed out. Sessions are never restored. Before it replaces anything, the app saves your current database as `pre-restore-<timestamp>.db` in the data folder, and it refuses files that are damaged, from a different schema version, contain no account, or hold keys encrypted with a different key than this install uses. The keys inside a backup are encrypted, so the backup is only useful together with the install's key (`secret.key` or `MMM_SECRET_KEY`): back that up separately and somewhere else. The file also contains your password hash, so keep it private.
+**Restoring replaces all services, history and accounts**, so you sign in afterwards with the account stored in the backup, and everyone is signed out. Sessions are never restored. Before it replaces anything, the app saves your current database as `pre-restore-<timestamp>.db` in the data folder, and it refuses files that are damaged, from a different schema version, or contain no account. The file also contains your password hash, so keep it private.
+
+**Restoring a backup from another install.** The API keys inside a backup are encrypted with the key of the install that made it. When you choose a backup file, the form shows an optional **Key of the backup** field. Paste the key there, or press **Load from secret.key** and choose that install's `secret.key` file (use the `MMM_SECRET_KEY` value instead if that install used one). The server reads the backup's keys with it and re-encrypts them under *this* install's own key as it copies them in, so:
+
+- no key file needs to be copied onto the server;
+- the key you enter is used once and is never stored or logged (it travels in a request header, not the URL, so use HTTPS if the app is reachable beyond your LAN);
+- your existing `secret.key` stays as it was.
+
+A wrong key is refused with a clear message and nothing is changed. Leave the field empty for a backup made by this same install. A backup is only useful together with its install's key, so back that key up separately and somewhere else.
 
 ## Security
 

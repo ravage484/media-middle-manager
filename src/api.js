@@ -23,7 +23,12 @@ export const api = {
   exportData: (secrets, history) => fetch(`/api/export?secrets=${secrets ? 1 : 0}&history=${history ? 1 : 0}`).then(j),
   importData: (data, options) => send('POST', '/api/import', { data, options }),
   security: () => fetch('/api/security').then(j),
-  restoreDb: (file) => fetch('/api/restore', { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: file }).then(j),
+  // sourceKey (optional) travels base64-encoded in a header, never in the URL.
+  restoreDb: (file, sourceKey) => {
+    const headers = { 'Content-Type': 'application/octet-stream' };
+    if (sourceKey) headers['X-Source-Key'] = btoa(unescape(encodeURIComponent(sourceKey)));
+    return fetch('/api/restore', { method: 'POST', headers, body: file }).then(j);
+  },
 };
 
 export function watchLabel(w) {

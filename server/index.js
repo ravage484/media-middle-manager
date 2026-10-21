@@ -71,10 +71,18 @@ app.get('/api/backup/db', wrap((req, res) => {
 }));
 app.post('/api/restore', express.raw({ type: () => true, limit: '100mb' }), wrap((req, res) => {
   if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(400).json({ error: 'No file received' });
+  // Optional key of the install that made the backup, sent base64-encoded in a header (never in the URL). It is not logged or stored.
+  let sourceKey;
+  const hdr = req.headers['x-source-key'];
+  if (hdr !== undefined) {
+    if (typeof hdr !== 'string' || hdr.length > 2000 || !/^[A-Za-z0-9+/=]*$/.test(hdr)) return res.status(400).json({ error: 'The key was not sent in the expected format' });
+    sourceKey = Buffer.from(hdr, 'base64').toString('utf8');
+    if (!sourceKey.trim()) sourceKey = undefined;
+  }
   const tmp = path.join(DATA, `restore-${Date.now()}.tmp.db`);
   fs.writeFileSync(tmp, req.body);
   try {
-    const result = restoreFrom(tmp);
+    const result = restoreFrom(tmp, sourceKey);
     resetLibraryCache();
     res.json(result);
   } catch (e) {
