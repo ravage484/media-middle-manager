@@ -20,13 +20,20 @@ export function exportData({ secrets = false, history = true } = {}) {
   };
 }
 
-function cleanService(s, i) {
+// Validates one service from any untrusted source (the settings form, an import file). Only plain http(s) URLs are
+// accepted: nothing here should ever be turned into a file:, data: or other-scheme request.
+export function cleanService(s, i = 0) {
   const name = str(s?.name, 100).trim();
   const url = str(s?.url, 300).trim();
-  if (!SERVICE_TYPES.includes(s?.type)) throw new Error(`Service #${i + 1}: unknown type "${s?.type}"`);
+  if (!SERVICE_TYPES.includes(s?.type)) throw new Error(`Service #${i + 1}: unknown type "${String(s?.type).slice(0, 30)}"`);
   if (!name) throw new Error(`Service #${i + 1}: missing name`);
-  if (!/^https?:\/\/\S+$/i.test(url)) throw new Error(`Service "${name}": URL must start with http:// or https://`);
-  return { id: str(s.id, 64), type: s.type, name, url, apiKey: str(s.apiKey, 200), username: str(s.username, 100), password: str(s.password, 200) };
+  let u;
+  try { u = new URL(url); } catch { /* handled below */ }
+  if (!u || !['http:', 'https:'].includes(u.protocol) || !u.hostname) throw new Error(`Service "${name}": URL must start with http:// or https://`);
+  if (u.username || u.password) throw new Error(`Service "${name}": do not put a username or password in the URL`);
+  const id = str(s.id, 64);
+  if (id && !/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw new Error(`Service "${name}": invalid id`);
+  return { id, type: s.type, name, url, apiKey: str(s.apiKey, 200), username: str(s.username, 100), password: str(s.password, 200) };
 }
 
 const cleanHistory = (h) => ({
@@ -78,8 +85,26 @@ export function importData(data, { mode = 'merge', history = true } = {}) {
 /* ---------- HTTP clients ---------- */
 const base = (s) => s.url.replace(/\/+$/, '');
 
+// fetch() only strips the Authorization header when a redirect crosses to another origin, so our X-Api-Key,
+// X-Plex-Token and Cookie headers would be forwarded to whatever host a service (or something on the path) redirects to.
+// Same-origin redirects are followed (a few hops); anything else is refused.
+async function safeFetch(url, init = {}, hops = 0) {
+  const res = await fetch(url, { ...init, redirect: 'manual', signal: init.signal ?? AbortSignal.timeout(30000) });
+  if (res.status >= 300 && res.status < 400 && res.headers.has('location')) {
+    if (hops >= 3) throw new Error('Too many redirects');
+    const next = new URL(res.headers.get('location'), url);
+    if (next.origin !== new URL(url).origin) {
+      throw new Error(`Refused a redirect to ${next.origin}: following it would send your API key there. If that is the right address, enter it in Settings instead.`);
+    }
+    await res.arrayBuffer().catch(() => {});
+    const keep = res.status === 307 || res.status === 308; // these must repeat the method and body; the others become a GET
+    return safeFetch(next.href, keep ? init : { ...init, method: 'GET', body: undefined }, hops + 1);
+  }
+  return res;
+}
+
 async function request(url, init) {
-  const res = await fetch(url, { ...init, signal: AbortSignal.timeout(30000) });
+  const res = await safeFetch(url, init);
   const text = await res.text();
   if (!res.ok) throw new Error(`${init.method || 'GET'} ${new URL(url).pathname} -> ${res.status} ${text.slice(0, 200)}`);
   try { return text ? JSON.parse(text) : null; } catch { return text; }
@@ -96,7 +121,7 @@ export function api(svc, p, { method = 'GET', body } = {}) {
 // qBittorrent (cookie session)
 const cookies = new Map();
 async function qbLogin(svc) {
-  const r = await fetch(base(svc) + '/api/v2/auth/login', {
+  const r = await safeFetch(base(svc) + '/api/v2/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', Referer: base(svc) },
     body: new URLSearchParams({ username: svc.username || '', password: svc.password || '' }),
@@ -110,7 +135,7 @@ export async function qb(svc, p, { method = 'GET', form } = {}, retry = true) {
   const cookie = cookies.get(svc.id) ?? (await qbLogin(svc));
   const headers = { Cookie: cookie, Referer: base(svc) };
   if (form) headers['Content-Type'] = 'application/x-www-form-urlencoded';
-  const res = await fetch(base(svc) + p, { method, headers, body: form && new URLSearchParams(form), signal: AbortSignal.timeout(30000) });
+  const res = await safeFetch(base(svc) + p, { method, headers, body: form && new URLSearchParams(form) });
   if (res.status === 403 && retry) { cookies.delete(svc.id); return qb(svc, p, { method, form }, false); }
   const text = await res.text();
   if (!res.ok) throw new Error(`qBittorrent ${p} -> ${res.status} ${text.slice(0, 200)}`);

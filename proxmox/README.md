@@ -63,4 +63,30 @@ Run the same command again, or `update` in the container console. It stops the s
 - To bring an existing install's data into the container, download a **database backup** from the old install (Settings > Import / Export), then restore it in the container's app. In the restore form, give the old install's `secret.key` in the **Key of the backup** field. The keys are re-encrypted under the container's own key, so no key file has to be copied onto the container.
 - Stored API keys are encrypted. The key is generated on first start into `/opt/media-middle-manager_data/secret.key`; back that file up separately from the database, or set `Environment=MMM_SECRET_KEY=...` in the systemd unit to keep the key out of the data folder. Without it, the stored keys cannot be recovered.
 - The database is SQLite through `better-sqlite3`, a native module. It ships prebuilt binaries for current Node versions, and the install script also installs `build-essential` and `python3` so it can compile the module if no prebuilt one matches (for example on ARM).
-- Forgot your password? In the container: `cd /opt/media-middle-manager && DATA_DIR=/opt/media-middle-manager_data npm run reset-password -- admin "new password"`.
+- The service runs as its own unprivileged user, `mmm`, not root, and only `/opt/media-middle-manager_data` (mode 700) is writable by it. The unit also sets `NoNewPrivileges`, an empty capability set and `UMask=0077`. It deliberately does not use mount-namespace options such as `ProtectSystem` or `PrivateTmp`, which can stop a service from starting inside an unprivileged LXC container. You can add them if your container supports them (`nesting=1`).
+- Forgot your password? Run the reset **as the service user**, so the database files stay owned by it: `cd /opt/media-middle-manager && runuser -u mmm -- env DATA_DIR=/opt/media-middle-manager_data npm run reset-password -- admin "new password"`. Running it as root would leave root-owned files in the data folder that the service could no longer write.
+- Failed logins are logged with the client address: `journalctl -u media-middle-manager | grep "\[auth\]"`.
+
+## Hardening a container that was installed before this
+
+Containers created from v0.1.1 or earlier run the service as root. New installs and updates do not change the service file, so apply this once inside the container:
+
+```bash
+useradd --system --home-dir /opt/media-middle-manager_data --no-create-home --shell /usr/sbin/nologin mmm
+```
+
+```bash
+chown -R mmm:mmm /opt/media-middle-manager_data && chmod 700 /opt/media-middle-manager_data
+```
+
+```bash
+sed -i '/^\[Service\]/a User=mmm\nGroup=mmm\nUMask=0077\nNoNewPrivileges=true\nCapabilityBoundingSet=\nAmbientCapabilities=' /etc/systemd/system/media-middle-manager.service && systemctl daemon-reload && systemctl restart media-middle-manager
+```
+
+Then check that it runs as the new user and answers:
+
+```bash
+ps -o user=,cmd= -C node && curl -s -o /dev/null -w '%{http_code}\n' http://localhost:3001/api/auth/status
+```
+
+You should see `mmm` as the user and `200`. If it does not start, `journalctl -u media-middle-manager -n 30` says why; the usual cause is data files still owned by root, which the `chown` above fixes.

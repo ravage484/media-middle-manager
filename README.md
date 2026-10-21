@@ -108,6 +108,7 @@ Everything is configured in the UI under **Settings**. The server is configured 
 | `MMM_SECRET_KEY` | unset | Encryption key for stored API keys: base64 of 32 random bytes, or any passphrase. If unset, a key is generated into `DATA_DIR/secret.key` (see [Encryption of API keys](#encryption-of-api-keys)) |
 | `MMM_ADMIN_USER`, `MMM_ADMIN_PASSWORD` | unset | Create the first account at startup instead of using the setup page (only used while no account exists) |
 | `MMM_AUTH_DISABLED` | `false` | `true` turns sign-in off. Only for use behind a proxy that already authenticates users |
+| `MMM_HOST` | all interfaces | Address to listen on, for example `127.0.0.1` when a reverse proxy on the same machine is the only client |
 | `MMM_TRUST_PROXY` | `false` | `true` when behind a reverse proxy, so the real client IP is used for login throttling and HTTPS is detected |
 
 Where each service's credentials come from:
@@ -198,11 +199,21 @@ A wrong key is refused with a clear message and nothing is changed. Leave the fi
 
 **Sign-in.** The first time you open the app it asks you to create an account. After that, every API call needs a signed-in session.
 
-- Passwords are at least 10 characters and stored as salted scrypt hashes.
-- Sessions use a random token in an `HttpOnly`, `SameSite=Strict` cookie (marked `Secure` over HTTPS). Only a hash of the token is stored, and sessions last 14 days from last use.
-- Repeated failed logins from one address or against one username are slowed down, then locked for up to 15 minutes.
+- Passwords are 10 to 200 characters, must not equal your username or be one repeated character, and are stored as salted scrypt hashes (N=65536, r=8, p=2). The parameters are stored with each hash, and an older, weaker hash is upgraded the next time its owner signs in.
+- Sessions use a random token in an `HttpOnly`, `SameSite=Strict` cookie (marked `Secure` over HTTPS). Only a hash of the token is stored. A session lasts 14 days from last use and never more than 30 days in total.
+- Login throttling: one address is cut off after 5 failed attempts, for longer each time (up to 15 minutes). A username is locked for 5 minutes only after 20 failures from any addresses, so a stranger cannot cheaply lock you out, but a distributed guesser still hits a wall. At most two password hashes run at once, so a flood of attempts cannot exhaust memory.
+- Failed logins are written to the log with the client address (`journalctl -u media-middle-manager`), so a tool such as fail2ban can act on them. Attacker-supplied text is sanitised so it cannot forge log lines.
 - Changing your password signs out every other session.
 - State-changing requests that name a different origin are rejected.
+
+**What the server does to protect itself and your services**
+
+- **A Content-Security-Policy** lets the page load scripts, styles and fonts only from the app itself, and connect only to the app. Images may come from anywhere (posters come from the hosts Radarr and Sonarr name). Other headers: `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: same-origin`, cross-origin isolation headers, `Cache-Control: no-store` on every API response, and HSTS when it is served over HTTPS.
+- **Your API keys never follow a redirect to another host.** `fetch` only strips the `Authorization` header across origins, so the `X-Api-Key`, Plex token and cookie headers would otherwise be forwarded to whatever a service redirects to. Same-host redirects are followed; any other redirect is refused with an explanation.
+- **Input is validated.** Services must be a known type with a plain `http://` or `https://` URL (no `file:`, `data:` or credentials in the URL). Delete and plan requests accept only well-formed title keys, and a delete request with no options does the least destructive thing.
+- **Request bodies are capped before sign-in** (100 KB); only an authenticated import may be large (20 MB). Errors are returned as short JSON, never stack traces.
+- **Files are private to the app's account.** The data folder is `700` and the database and key file `600` on Linux, and deleted data is overwritten rather than left in free pages.
+- **Optional bind address.** `MMM_HOST=127.0.0.1` makes the app listen only on that address, for when a reverse proxy on the same machine is its only client.
 
 **The first visitor creates the account.** Until you set it up, anyone who can reach the page can claim it. On a LAN that is usually fine; if the app is reachable from elsewhere, set `MMM_ADMIN_USER` and `MMM_ADMIN_PASSWORD` so the account exists before the server starts listening.
 

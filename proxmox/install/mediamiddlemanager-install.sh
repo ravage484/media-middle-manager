@@ -28,10 +28,17 @@ cd /opt/media-middle-manager || exit
 $STD npm ci
 $STD npm run build
 $STD npm prune --omit=dev
-mkdir -p /opt/media-middle-manager_data
 msg_ok "Built Media Middle Manager"
 
 msg_info "Creating Service"
+# The app runs as its own unprivileged user, not root, so a flaw in it cannot touch the rest of the container.
+# Only the data folder is writable by that user; the application files stay owned by root.
+id mmm &>/dev/null || useradd --system --home-dir /opt/media-middle-manager_data --no-create-home --shell /usr/sbin/nologin mmm
+mkdir -p /opt/media-middle-manager_data
+chown -R mmm:mmm /opt/media-middle-manager_data
+chmod 700 /opt/media-middle-manager_data
+# The hardening below is limited to options that work inside an unprivileged LXC container; mount-namespace options
+# (ProtectSystem, PrivateTmp, ...) can stop a service from starting there.
 cat <<EOF >/etc/systemd/system/media-middle-manager.service
 [Unit]
 Description=Media Middle Manager
@@ -39,12 +46,18 @@ After=network.target
 
 [Service]
 Type=simple
+User=mmm
+Group=mmm
 WorkingDirectory=/opt/media-middle-manager
 Environment=NODE_ENV=production
 Environment=PORT=3001
 Environment=DATA_DIR=/opt/media-middle-manager_data
 ExecStart=/usr/bin/node server/index.js
 Restart=on-failure
+UMask=0077
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
 
 [Install]
 WantedBy=multi-user.target

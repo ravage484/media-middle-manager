@@ -3,8 +3,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { initKey, keySource, encryptSecret, decryptSecret, decryptSecretWith, deriveKey, isEncrypted, canDecrypt, aadFor } from './secrets.js';
 
+// Everything the app writes (database, keys, backups) is for its own account only: no group or world access.
+try { process.umask(0o077); } catch { /* not supported on this platform */ }
 export const DATA = process.env.DATA_DIR || path.resolve('data');
-fs.mkdirSync(DATA, { recursive: true });
+fs.mkdirSync(DATA, { recursive: true, mode: 0o700 });
+try { fs.chmodSync(DATA, 0o700); } catch { /* not ours to change */ }
 initKey(DATA);
 export const securityInfo = () => ({ encryption: 'AES-256-GCM', keySource });
 
@@ -12,6 +15,8 @@ export const db = new Database(path.join(DATA, 'mmm.db'));
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 db.pragma('secure_delete = ON'); // overwrite deleted data with zeros instead of leaving it in free pages
+// Files from earlier versions were created with the default permissions: tighten them.
+for (const f of ['mmm.db', 'mmm.db-wal', 'mmm.db-shm', 'secret.key']) { try { fs.chmodSync(path.join(DATA, f), 0o600); } catch { /* missing, or not ours */ } }
 
 // Schema changes go at the end of this list; PRAGMA user_version records how many have run.
 const MIGRATIONS = [

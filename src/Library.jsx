@@ -32,6 +32,8 @@ const STATUS_TEST = { disk: (i) => i.hasFile, nofile: (i) => !i.hasFile, mon: (i
 const empty = () => new Set();
 const UNTAGGED = '\u0000untagged';
 const Tags = ({ item }) => item.tags.length > 0 && <span className="tags">{item.tags.map((t) => <i key={t}>{t}</i>)}</span>;
+// Stored preferences can come from an imported file, so only known values are accepted.
+const pick = (v, allowed, fallback) => (allowed.includes(v) ? v : fallback);
 const store = (k, d) => { try { return localStorage.getItem(k) || d; } catch { return d; } };
 
 const Trash = () => (
@@ -55,10 +57,10 @@ export default function Library({ goSettings }) {
   const [staleDays, setStaleDays] = useState('');
   const [minGB, setMinGB] = useState('');
   const [maxGB, setMaxGB] = useState('');
-  const [sort, setSort] = useState(store('sort', 'size'));
+  const [sort, setSort] = useState(pick(store('sort', 'size'), Object.keys(SORTS), 'size'));
   const [desc, setDesc] = useState(store('desc', '1') === '1');
-  const [view, setView] = useState(store('view', 'tile'));
-  const [pageSize, setPageSize] = useState(Number(store('pageSize', '250')));
+  const [view, setView] = useState(pick(store('view', 'tile'), ['tile', 'grid', 'list'], 'tile'));
+  const [pageSize, setPageSize] = useState(pick(Number(store('pageSize', '250')), [100, 250, 500, 1000], 250));
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState(new Set());
   const [dialog, setDialog] = useState(null);
