@@ -1,0 +1,42 @@
+{
+  "name": "Media Middle Manager",
+  "slug": "media-middle-manager",
+  "categories": [13],
+  "date_created": "2026-10-20",
+  "type": "ct",
+  "updateable": true,
+  "privileged": false,
+  "interface_port": 3001,
+  "documentation": "https://github.com/ravage484/media-middle-manager#readme",
+  "website": "https://github.com/ravage484/media-middle-manager",
+  "logo": "https://raw.githubusercontent.com/ravage484/media-middle-manager/main/public/favicon.svg",
+  "config_path": "/opt/media-middle-manager_data/config.json",
+  "description": "A dashboard that connects to Radarr, Sonarr, Overseerr and qBittorrent to remove media cleanly: it deletes the request, unmonitors the title (keeping Arr history), deletes the files and torrents, and logs what was done. Browse by poster, filter by size, tags and watch history (Tautulli or Plex), and multi-select to delete in bulk.",
+  "install_methods": [
+    {
+      "type": "default",
+      "script": "ct/media-middle-manager.sh",
+      "resources": {
+        "cpu": 1,
+        "ram": 1024,
+        "hdd": 4,
+        "os": "debian",
+        "version": "13"
+      }
+    }
+  ],
+  "default_credentials": {
+    "username": null,
+    "password": null
+  },
+  "notes": [
+    {
+      "text": "There is no login. Only expose it on your LAN or behind a reverse proxy that adds authentication.",
+      "type": "warning"
+    },
+    {
+      "text": "Add your Radarr, Sonarr, Overseerr, qBittorrent, Tautulli and Plex connections under Settings after install. Keys are stored in /opt/media-middle-manager_data/config.json.",
+      "type": "info"
+    }
+  ]
+}

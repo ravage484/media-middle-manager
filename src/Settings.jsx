@@ -1,0 +1,25 @@
+import { useState } from 'react';
+import Services from './Services.jsx';
+import Appearance from './Appearance.jsx';
+import DeleteDefaults from './DeleteDefaults.jsx';
+import ImportExport from './ImportExport.jsx';
+
+const TABS = [['services', 'Services'], ['appearance', 'Appearance'], ['delete', 'Delete defaults'], ['backup', 'Import / Export']];
+
+export default function Settings({ appearance, setAppearance }) {
+  const [tab, setTab] = useState('services');
+  return (
+    <div className="settings">
+      <h2 className="ptitle2">Settings</h2>
+      <div className="stabs" role="tablist">
+        {TABS.map(([id, label]) => (
+          <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'on' : ''} onClick={() => setTab(id)}>{label}</button>
+        ))}
+      </div>
+      {tab === 'services' && <Services />}
+      {tab === 'appearance' && <Appearance appearance={appearance} setAppearance={setAppearance} />}
+      {tab === 'delete' && <DeleteDefaults />}
+      {tab === 'backup' && <ImportExport />}
+    </div>
+  );
+}
