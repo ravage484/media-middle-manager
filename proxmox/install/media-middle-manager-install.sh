@@ -13,6 +13,12 @@ setting_up_container
 network_check
 update_os
 
+msg_info "Installing Dependencies"
+$STD apt install -y \
+  build-essential \
+  python3
+msg_ok "Installed Dependencies"
+
 NODE_VERSION="22" setup_nodejs
 
 fetch_and_deploy_gh_release "media-middle-manager" "ravage484/media-middle-manager" "tarball"

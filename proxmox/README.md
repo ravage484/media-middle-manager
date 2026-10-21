@@ -1,13 +1,15 @@
 # Proxmox VE helper script
 
-Files for installing Media Middle Manager in its own LXC container, in the [community-scripts/ProxmoxVE](https://github.com/community-scripts/ProxmoxVE) format.
+Files for installing Media Middle Manager in its own LXC container, written for the [community-scripts](https://github.com/community-scripts/ProxmoxVE) helper-script engine.
 
-| File | Goes in the helper-scripts repo at |
+| File | Purpose |
 |---|---|
-| `ct/media-middle-manager.sh` | `ct/media-middle-manager.sh` (runs on the Proxmox host, creates the container, and handles updates) |
-| `install/media-middle-manager-install.sh` | `install/media-middle-manager-install.sh` (runs inside the container) |
-| `ct/headers/mediamiddlemanager` | `ct/headers/mediamiddlemanager` (the banner) |
-| `frontend/public/json/media-middle-manager.json` | `frontend/public/json/media-middle-manager.json` (website metadata) |
+| `ct/media-middle-manager.sh` | Runs on the Proxmox host: creates the container, and handles updates |
+| `install/media-middle-manager-install.sh` | Runs inside the new container |
+| `ct/headers/mediamiddlemanager` | The banner. Only needed if the app is ever submitted to the community-scripts repositories; this engine does not read it from here |
+| `frontend/public/json/media-middle-manager.json` | Website metadata, also only for a submission |
+
+The engine lives in its own repository (`community-scripts/core`) and can load the `ct/` and `install/` scripts from any location via `COMMUNITY_SCRIPTS_URL`. That is how this project uses it, so **no fork of the community-scripts repository is needed**.
 
 ## What it sets up
 
@@ -18,28 +20,44 @@ Files for installing Media Middle Manager in its own LXC container, in the [comm
 
 ## Before you use it
 
-1. **Create a release.** The scripts download the latest *release* of `ravage484/media-middle-manager`, not the default branch. Tag one (for example `v0.1.0`) and publish it.
-2. **The repository is private for now, and that blocks these scripts.** The installer downloads the release anonymously, which fails (404) on a private repo, and so does the `curl` one-liner below for a private fork. While testing, either make the repository public, or install by hand with the manual steps in the main README. A token-based download is possible but is not wired into these scripts.
-3. Verify the category id (`13`) in the JSON against the helper-scripts `metadata.json`.
+1. **The repository must be public while you install.** Two things are fetched anonymously over the internet: the two scripts from `raw.githubusercontent.com`, and the release tarball inside the container. Both return 404 for a private repository. The engine can use a `GITHUB_TOKEN` for the release lookup, but I could not confirm the token is passed into the container or that it covers the tarball download, so do not rely on it. Make the repo public for the install (you can make it private again afterwards; updates need it public again), or use the manual install in the main README.
+2. **Publish a release.** The installer downloads the latest *release*, not the default branch:
+
+   ```bash
+   gh release create v0.1.0 --repo ravage484/media-middle-manager --title "v0.1.0" --notes "First test release"
+   ```
+3. Push any script changes to `main` first, because the host script fetches the install script from `main`.
 
 ## Running it
 
-The container script pulls the shared `build.func` and your install script from the helper-scripts repository, so the install script has to live in a repository that serves it from the expected path. For your own use, that means a **fork** of `community-scripts/ProxmoxVE` with the files above added. Then, on the Proxmox host shell:
+On the Proxmox host shell:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/ravage484/ProxmoxVE/main/ct/media-middle-manager.sh)"
+COMMUNITY_SCRIPTS_URL="https://raw.githubusercontent.com/ravage484/media-middle-manager/main/proxmox" bash -c "$(curl -fsSL https://raw.githubusercontent.com/ravage484/media-middle-manager/main/proxmox/ct/media-middle-manager.sh)"
 ```
 
-If your fork keeps the original `build.func` source line pointing at `community-scripts`, change the install-script download URL in your fork's `misc/build.func` to point at your fork as well.
+`COMMUNITY_SCRIPTS_URL` tells the engine where to find `ct/` and `install/`. The engine itself, and the shared `tools.func` (Node.js setup, release download), still come from `community-scripts/core`. Choose **Default** at the prompt for the settings in the table above, or **Advanced** to change CPU, RAM, disk, network and so on.
+
+To change the container defaults without prompts, set the variables on the same line, for example `var_ram=2048 var_disk=8`.
+
+### Running from a local checkout
+
+If you would rather not pull the scripts over the internet, clone the repo on the Proxmox host and point the engine at the folder:
+
+```bash
+COMMUNITY_SCRIPTS_ROOT=/root/media-middle-manager/proxmox bash /root/media-middle-manager/proxmox/ct/media-middle-manager.sh
+```
+
+The engine prefers local files when they exist. The container still downloads the release from GitHub, so the repo must still be public for that step.
 
 ## Updating
 
-Run the same command again inside the container's shell, or run `update` in the container console. It stops the service, downloads the new release, rebuilds and restarts.
+Run the same command again, or `update` in the container console. It stops the service, downloads the new release, rebuilds and restarts. If `update` re-runs the script without your `COMMUNITY_SCRIPTS_URL`, it will not find the app, so run the full command above instead. I have not checked how the engine stores that setting for later.
 
 ## Notes
 
-- These scripts were syntax-checked and the install steps (`npm ci`, build, prune, start with the service's environment variables) were rehearsed on a clean copy, but they have **not** been run on a real Proxmox host.
+- These scripts were syntax-checked, written against the current engine (`community-scripts/core`) and compared with a current Node app's scripts, and the install steps (`npm ci`, build, prune, start with the service's environment variables) were rehearsed on a clean copy. They have **not** been run on a real Proxmox host, so expect to fix something on the first run. If it fails, the engine keeps the container so you can read the install log inside it.
 - The first visit to the app asks you to create an account, and until you do, anyone who can reach port 3001 can claim it. To avoid that window, add `Environment=MMM_ADMIN_USER=...` and `Environment=MMM_ADMIN_PASSWORD=...` to the systemd unit before the first start (the install script does not set them).
 - Stored API keys are encrypted. The key is generated on first start into `/opt/media-middle-manager_data/secret.key`; back that file up separately from the database, or set `Environment=MMM_SECRET_KEY=...` in the systemd unit to keep the key out of the data folder. Without it, the stored keys cannot be recovered.
-- The database is SQLite through `better-sqlite3`, a native module. It ships prebuilt binaries for current Node versions on Debian, so the install needs no compiler. If an install ever fails building it, install `build-essential` and `python3` in the container and re-run `npm ci`.
+- The database is SQLite through `better-sqlite3`, a native module. It ships prebuilt binaries for current Node versions, and the install script also installs `build-essential` and `python3` so it can compile the module if no prebuilt one matches (for example on ARM).
 - Forgot your password? In the container: `cd /opt/media-middle-manager && DATA_DIR=/opt/media-middle-manager_data npm run reset-password -- admin "new password"`.
