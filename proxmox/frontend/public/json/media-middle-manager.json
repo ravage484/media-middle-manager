@@ -15,7 +15,7 @@
   "install_methods": [
     {
       "type": "default",
-      "script": "ct/media-middle-manager.sh",
+      "script": "ct/mediamiddlemanager.sh",
       "resources": {
         "cpu": 1,
         "ram": 1024,
