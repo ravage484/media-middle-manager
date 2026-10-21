@@ -1,0 +1,5 @@
+# Normalize line endings in the repo, but never convert the Proxmox scripts to CRLF:
+# they run on Linux and break with Windows line endings.
+* text=auto
+*.sh text eol=lf
+proxmox/ct/headers/* text eol=lf
