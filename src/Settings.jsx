@@ -3,10 +3,11 @@ import Services from './Services.jsx';
 import Appearance from './Appearance.jsx';
 import DeleteDefaults from './DeleteDefaults.jsx';
 import ImportExport from './ImportExport.jsx';
+import Account from './Account.jsx';
 
-const TABS = [['services', 'Services'], ['appearance', 'Appearance'], ['delete', 'Delete defaults'], ['backup', 'Import / Export']];
+const TABS = [['services', 'Services'], ['appearance', 'Appearance'], ['delete', 'Delete defaults'], ['backup', 'Import / Export'], ['account', 'Account']];
 
-export default function Settings({ appearance, setAppearance }) {
+export default function Settings({ appearance, setAppearance, auth, onSignOut }) {
   const [tab, setTab] = useState('services');
   return (
     <div className="settings">
@@ -20,6 +21,7 @@ export default function Settings({ appearance, setAppearance }) {
       {tab === 'appearance' && <Appearance appearance={appearance} setAppearance={setAppearance} />}
       {tab === 'delete' && <DeleteDefaults />}
       {tab === 'backup' && <ImportExport />}
+      {tab === 'account' && <Account auth={auth} onSignOut={onSignOut} />}
     </div>
   );
 }

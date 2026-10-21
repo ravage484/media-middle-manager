@@ -144,6 +144,14 @@ table.list { width: 100%; border-collapse: collapse; }
 .sadd:hover:not(:disabled) { border-color: var(--accent); background: none; }
 .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--dim); flex: none; }
 .dot.ok { background: var(--ok); } .dot.bad { background: var(--danger); } .dot.testing { background: var(--warn); }
+.loginpage { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
+.logincard { width: min(400px, 100%); background: var(--panel); border: 1px solid var(--panel2); border-radius: 14px; padding: 28px; display: flex; flex-direction: column; gap: 14px; }
+.loginbrand { display: flex; align-items: center; gap: 12px; }
+.loginbrand h1 { margin: 0; font-size: 20px; }
+.logincard h2 { margin: 4px 0 0; font-size: 18px; }
+.logincard p { margin: 0; }
+.logincard label { display: flex; flex-direction: column; gap: 4px; color: var(--dim); }
+.logincard .primary { padding: 10px; }
 .form input[type=file] { padding: 8px; }
 .form input[type=radio] { padding: 0; }
 .dialog.small { width: min(460px, 100%); }

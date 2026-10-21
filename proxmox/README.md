@@ -39,4 +39,7 @@ Run the same command again inside the container's shell, or run `update` in the 
 ## Notes
 
 - These scripts were syntax-checked and the install steps (`npm ci`, build, prune, start with the service's environment variables) were rehearsed on a clean copy, but they have **not** been run on a real Proxmox host.
-- The app has no login. Keep it on your LAN or behind an authenticating reverse proxy.
+- The first visit to the app asks you to create an account, and until you do, anyone who can reach port 3001 can claim it. To avoid that window, add `Environment=MMM_ADMIN_USER=...` and `Environment=MMM_ADMIN_PASSWORD=...` to the systemd unit before the first start (the install script does not set them).
+- Stored API keys are encrypted. The key is generated on first start into `/opt/media-middle-manager_data/secret.key`; back that file up separately from the database, or set `Environment=MMM_SECRET_KEY=...` in the systemd unit to keep the key out of the data folder. Without it, the stored keys cannot be recovered.
+- The database is SQLite through `better-sqlite3`, a native module. It ships prebuilt binaries for current Node versions on Debian, so the install needs no compiler. If an install ever fails building it, install `build-essential` and `python3` in the container and re-run `npm ci`.
+- Forgot your password? In the container: `cd /opt/media-middle-manager && DATA_DIR=/opt/media-middle-manager_data npm run reset-password -- admin "new password"`.

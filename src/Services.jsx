@@ -67,7 +67,9 @@ export default function Services() {
   const [err, setErr] = useState('');
 
   // Test every service as soon as the list loads.
+  const [sec, setSec] = useState(null);
   useEffect(() => { api.services().then((l) => { setList(l); l.forEach(testOne); }).catch((e) => setErr(e.message)); }, []);
+  useEffect(() => { api.security().then(setSec).catch(() => {}); }, []);
 
   const persist = async (next) => { const saved = await api.saveServices(next); setList(saved); return saved; };
   const testOne = async (s) => {
@@ -94,7 +96,7 @@ export default function Services() {
     <div>
       {err && <div className="notice bad">{err}</div>}
       <div className="stoolbar">
-        <span className="dim">{list.length} service{list.length === 1 ? '' : 's'} configured. Keys are stored only on the server.</span>
+        <span className="dim">{list.length} service{list.length === 1 ? '' : 's'} configured. Keys stay on the server{sec ? `, encrypted at rest (${sec.encryption}, key from ${sec.keySource === 'env' ? 'MMM_SECRET_KEY' : 'data/secret.key'})` : ''}.</span>
         <button onClick={() => list.forEach(testOne)} disabled={!list.length}>Test all connections</button>
       </div>
 

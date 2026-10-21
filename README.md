@@ -9,7 +9,7 @@
 </p>
 
 > [!WARNING]
-> **Early testing. Not ready for production.** This tool deletes media files and removes requests and torrents. Expect rough edges and breaking changes, and try it on a few throwaway titles first. It has no login.
+> **Early testing. Not ready for production.** This tool deletes media files and removes requests and torrents. Expect rough edges and breaking changes, and try it on a few throwaway titles first.
 
 ---
 
@@ -54,7 +54,7 @@ For each selected title, in this order:
 3. **Radarr / Sonarr**: delete the media file(s) through the file endpoints. It deliberately does not use "delete movie/series", which would erase the history. This step is **skipped if unmonitoring failed**, because deleting a monitored file would trigger a re-download.
 4. **qBittorrent**: remove the torrents (found through the Arr's download history) together with their data, so seeding or hardlinked copies do not keep using disk.
 5. **Plex** (optional): rescan the movie and show libraries.
-6. Record the result in `history.json`.
+6. Record the result in the database (shown on the History tab).
 
 Prowlarr can be added for a connection test, but the delete workflow does not use it.
 
@@ -104,7 +104,11 @@ Everything is configured in the UI under **Settings**. The server is configured 
 | Variable | Default | Purpose |
 |---|---|---|
 | `PORT` | `3001` | Port to listen on |
-| `DATA_DIR` | `./data` | Where `config.json` and `history.json` are stored |
+| `DATA_DIR` | `./data` | Where the database (`mmm.db`) is stored |
+| `MMM_SECRET_KEY` | unset | Encryption key for stored API keys: base64 of 32 random bytes, or any passphrase. If unset, a key is generated into `DATA_DIR/secret.key` (see [Encryption of API keys](#encryption-of-api-keys)) |
+| `MMM_ADMIN_USER`, `MMM_ADMIN_PASSWORD` | unset | Create the first account at startup instead of using the setup page (only used while no account exists) |
+| `MMM_AUTH_DISABLED` | `false` | `true` turns sign-in off. Only for use behind a proxy that already authenticates users |
+| `MMM_TRUST_PROXY` | `false` | `true` when behind a reverse proxy, so the real client IP is used for login throttling and HTTPS is detected |
 
 Where each service's credentials come from:
 
@@ -118,12 +122,34 @@ Where each service's credentials come from:
 
 ### Data and backups
 
-Your connections and deletion history are in `DATA_DIR`:
+Everything the server stores is in one SQLite file, `mmm.db`, inside `DATA_DIR` (plus `mmm.db-wal` and `mmm.db-shm` while it runs):
 
-- `config.json` holds your services and **API keys in plain text**, so keep it private.
-- `history.json` is the log shown on the History tab.
+| Table | Contents |
+|---|---|
+| `services` | Your connections. API keys and passwords are stored **encrypted** (see below); names, URLs and usernames are not |
+| `history` | One row per deletion, shown on the History tab |
+| `users`, `sessions` | Your account (password stored as a salted scrypt hash) and signed-in sessions |
 
-Back those two files up and you can restore everything on a fresh install.
+Schema changes are applied automatically at startup, tracked with SQLite's `user_version`.
+
+**Upgrading from the JSON files:** the first start with this version imports an existing `config.json` and `history.json` into the database and renames them to `config.json.migrated` and `history.json.migrated`. They are left in place as a backup. **`config.json.migrated` still holds your API keys in plain text**, so delete it as soon as you have checked that everything works.
+
+### Encryption of API keys
+
+API keys and the qBittorrent password are encrypted with AES-256-GCM before they are written to the database, and decrypted in memory when the server calls Radarr, Sonarr and the rest. Each value gets its own random IV and is bound to its own row and column, so an encrypted value cannot be copied to another service. Anything stored in plain text by an older version is encrypted on the next start, and the old plain text is cleared from the database file.
+
+The key comes from one of two places:
+
+| Source | When | Notes |
+|---|---|---|
+| `MMM_SECRET_KEY` environment variable | If set | Base64 of 32 random bytes (`openssl rand -base64 32`), or any passphrase. Keeping it outside the data folder (a systemd `EnvironmentFile`, a Docker secret) is the stronger setup |
+| `DATA_DIR/secret.key` | Otherwise | Generated automatically on first start with owner-only permissions. Simple, but it sits next to the database |
+
+**What this protects, and what it does not.** The server has to decrypt the keys to use them, so encryption cannot protect against someone who controls the running app or a signed-in session. It does protect the database *on its own*: a copied `mmm.db`, a database backup, or a snapshot of the volume taken without the key. If the key is a file in the same folder, copying the whole data folder gets both, which is why the environment variable is the better choice if you care about this.
+
+**Keep the key.** Without it the stored keys cannot be recovered; you would re-enter them under Settings. The app refuses to start with a clear message if the key does not match the stored data, rather than quietly breaking every service. To move from the key file to the environment variable, set `MMM_SECRET_KEY` to the contents of `secret.key`; nothing needs re-encrypting. A database backup restores only on an install that has the same key.
+
+**Backing up:** use **Settings > Import / Export**. Its **Database backup** button downloads a complete, consistent copy of the database while the app is running. Copying `mmm.db` by hand is only safe with the app stopped, because recent changes can still be in the `-wal` file.
 
 ### Import and export
 
@@ -145,13 +171,44 @@ Back those two files up and you can restore everything on a fresh install.
 
 In both modes, a blank key in the file never erases a key you already have. History entries are matched by id, so importing the same file twice does not create duplicates. Files are validated before anything is written, so a bad file changes nothing.
 
-You can also copy `config.json` and `history.json` in `DATA_DIR` by hand.
+Exports never contain your account or sessions, so an install you import into keeps its own login.
+
+#### Database backup and restore
+
+The same tab can take a **whole-database backup** (a `.db` file) and restore one. Use it to back up or move the entire install exactly as it is; use the JSON export when you want to pick what to bring across.
+
+| | JSON export | Database backup |
+|---|---|---|
+| Services and history | yes (keys optional, plain text if included) | yes, always, with keys encrypted |
+| Your account | no | yes |
+| Browser preferences | yes (optional) | no |
+| Merge into an existing install | yes | no, it replaces everything |
+
+**Restoring replaces all services, history and accounts**, so you sign in afterwards with the account stored in the backup, and everyone is signed out. Sessions are never restored. Before it replaces anything, the app saves your current database as `pre-restore-<timestamp>.db` in the data folder, and it refuses files that are damaged, from a different schema version, contain no account, or hold keys encrypted with a different key than this install uses. The keys inside a backup are encrypted, so the backup is only useful together with the install's key (`secret.key` or `MMM_SECRET_KEY`): back that up separately and somewhere else. The file also contains your password hash, so keep it private.
 
 ## Security
 
-**There is no login.** Anyone who can reach the page can delete media. Run it on your LAN only, or put it behind a reverse proxy that adds authentication (Authelia, Authentik, Caddy basic auth, and so on).
+**Sign-in.** The first time you open the app it asks you to create an account. After that, every API call needs a signed-in session.
 
-API keys stay on the server and are never sent to the browser; the Settings page only ever shows them masked.
+- Passwords are at least 10 characters and stored as salted scrypt hashes.
+- Sessions use a random token in an `HttpOnly`, `SameSite=Strict` cookie (marked `Secure` over HTTPS). Only a hash of the token is stored, and sessions last 14 days from last use.
+- Repeated failed logins from one address or against one username are slowed down, then locked for up to 15 minutes.
+- Changing your password signs out every other session.
+- State-changing requests that name a different origin are rejected.
+
+**The first visitor creates the account.** Until you set it up, anyone who can reach the page can claim it. On a LAN that is usually fine; if the app is reachable from elsewhere, set `MMM_ADMIN_USER` and `MMM_ADMIN_PASSWORD` so the account exists before the server starts listening.
+
+**Use HTTPS if it is reachable beyond your LAN.** Sessions and passwords are sent in the clear over plain HTTP. Put it behind a reverse proxy that terminates TLS and set `MMM_TRUST_PROXY=true`.
+
+**Forgot your password?** On the machine running the app (with the same `DATA_DIR`):
+
+```bash
+npm run reset-password -- admin "a new password, 10+ characters"
+```
+
+This sets the password, creates the account if it does not exist, and signs out all sessions. It only works for someone with access to the server's files, which is the point. The password appears in your shell history, so clear it afterwards if that matters.
+
+API keys stay on the server and are never sent to the browser; the Settings page only ever shows them masked. They are encrypted at rest (see [Encryption of API keys](#encryption-of-api-keys)). A JSON export made with "Include API keys" is the exception, because it is plain text by design: delete it once you have used it.
 
 ## How it works
 
@@ -160,22 +217,24 @@ A small Express server holds your keys, talks to each service's API and does the
 ```
 Browser (React)  ->  /api  ->  Express  ->  Radarr / Sonarr / Overseerr / qBittorrent / Tautulli / Plex
                                    |
-                                   +-> data/config.json, data/history.json
+                                   +-> data/mmm.db (SQLite)
 ```
 
 | Endpoint | Purpose |
 |---|---|
+| `/api/auth/status`, `setup`, `login`, `logout`, `password` | Account and sessions (everything else below requires a session) |
 | `GET /api/library` | Merged library with tags, size and watch data (`?refresh=1` skips the cache) |
 | `POST /api/plan` | Preview what a delete would touch |
 | `POST /api/delete` | Run the delete steps |
 | `GET /api/history` | Deletion history |
 | `GET/PUT /api/services`, `POST /api/services/test` | Manage and test connections |
-| `GET /api/export`, `POST /api/import` | Export and import settings |
+| `GET /api/export`, `POST /api/import` | Export and import settings (JSON) |
+| `GET /api/backup/db`, `POST /api/restore` | Download and restore a whole-database backup |
 
 ### Project layout
 
 ```
-server/        Express API (lib.js has the service clients and the delete workflow)
+server/        Express API (lib.js: service clients and the delete workflow, db.js: SQLite, auth.js: sign-in)
 src/           React app (Library, Detail, DeleteDialog, Settings, themes, ...)
 public/        Favicon and service logos
 proxmox/       Proxmox VE helper script files
@@ -200,7 +259,7 @@ No. Plex only reports plays for the account that owns the token. Use Tautulli fo
 - Search and request new media (through Overseerr)
 - Use a tag such as `keep` to protect titles from deletion
 - Edit Radarr and Sonarr tags from the library
-- Optional authentication
+- Multiple users and roles
 
 ## Credits and trademarks
 

@@ -10,7 +10,7 @@
   "documentation": "https://github.com/ravage484/media-middle-manager#readme",
   "website": "https://github.com/ravage484/media-middle-manager",
   "logo": "https://raw.githubusercontent.com/ravage484/media-middle-manager/main/public/favicon.svg",
-  "config_path": "/opt/media-middle-manager_data/config.json",
+  "config_path": "/opt/media-middle-manager_data/mmm.db",
   "description": "A dashboard that connects to Radarr, Sonarr, Overseerr and qBittorrent to remove media cleanly: it deletes the request, unmonitors the title (keeping Arr history), deletes the files and torrents, and logs what was done. Browse by poster, filter by size, tags and watch history (Tautulli or Plex), and multi-select to delete in bulk.",
   "install_methods": [
     {
@@ -31,11 +31,11 @@
   },
   "notes": [
     {
-      "text": "There is no login. Only expose it on your LAN or behind a reverse proxy that adds authentication.",
+      "text": "The first visit asks you to create an account. Until you do, anyone who can reach port 3001 can claim it, so do that straight away, and use HTTPS if it is reachable beyond your LAN.",
       "type": "warning"
     },
     {
-      "text": "Add your Radarr, Sonarr, Overseerr, qBittorrent, Tautulli and Plex connections under Settings after install. Keys are stored in /opt/media-middle-manager_data/config.json.",
+      "text": "Add your Radarr, Sonarr, Overseerr, qBittorrent, Tautulli and Plex connections under Settings after install. Everything is stored in the SQLite database /opt/media-middle-manager_data/mmm.db, with API keys encrypted using /opt/media-middle-manager_data/secret.key. Back that key file up separately: without it the stored keys cannot be recovered.",
       "type": "info"
     }
   ]

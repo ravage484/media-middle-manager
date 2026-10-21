@@ -1,20 +1,8 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import crypto from 'node:crypto';
+import { getServices, saveServices, getHistory, addHistory, replaceHistory } from './db.js';
 
-/* ---------- storage (config + history as JSON files) ---------- */
-const DATA = process.env.DATA_DIR || path.resolve('data');
-fs.mkdirSync(DATA, { recursive: true });
-const read = (f, d) => { try { return JSON.parse(fs.readFileSync(path.join(DATA, f), 'utf8')); } catch { return d; } };
-const write = (f, v) => {
-  const p = path.join(DATA, f);
-  fs.writeFileSync(p + '.tmp', JSON.stringify(v, null, 2));
-  fs.renameSync(p + '.tmp', p);
-};
-export const getServices = () => read('config.json', []);
-export const saveServices = (s) => write('config.json', s);
-export const getHistory = () => read('history.json', []);
-const addHistory = (e) => write('history.json', [e, ...getHistory()]);
+export { getServices, saveServices, getHistory };
+export const resetLibraryCache = () => { cache.at = 0; }; // after services change underneath us (e.g. a restore)
 
 /* ---------- export / import of settings ---------- */
 const SERVICE_TYPES = ['radarr', 'sonarr', 'overseerr', 'prowlarr', 'qbittorrent', 'tautulli', 'plex'];
@@ -81,7 +69,7 @@ export function importData(data, { mode = 'merge', history = true } = {}) {
       .filter((h) => h && typeof h.id === 'string' && typeof h.at === 'string' && typeof h.title === 'string' && !seen.has(h.id))
       .map(cleanHistory);
     stats.historyAdded = extra.length;
-    write('history.json', [...base, ...extra].sort((a, b) => b.at.localeCompare(a.at)));
+    replaceHistory([...base, ...extra].sort((a, b) => b.at.localeCompare(a.at)));
   }
   cache.at = 0; // library depends on the services
   return stats;

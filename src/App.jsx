@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import Library from './Library.jsx';
 import Settings from './Settings.jsx';
 import History from './History.jsx';
+import Login from './Login.jsx';
 import Logo from './Logo.jsx';
+import { api } from './api.js';
 import { applyAppearance, loadAppearance } from './themes.js';
 
 const Icon = ({ children }) => (
@@ -16,7 +18,31 @@ const TABS = [
 
 const read = () => { try { const v = localStorage.getItem('navCollapsed'); return v === null ? window.innerWidth < 800 : v === '1'; } catch { return false; } };
 
+// Decides what to show: first-run setup, sign-in, or the app.
 export default function App() {
+  const [auth, setAuth] = useState(null); // null while loading
+
+  useEffect(() => {
+    api.authStatus().then(setAuth).catch(() => setAuth({ error: true }));
+    // Any API call that comes back 401 (for example an expired session) lands here.
+    const expired = () => setAuth((a) => ({ ...a, authenticated: false, setupRequired: false, username: null }));
+    window.addEventListener('mmm-unauthorized', expired);
+    return () => window.removeEventListener('mmm-unauthorized', expired);
+  }, []);
+
+  if (!auth) return <div className="loginpage"><p className="dim">Loading…</p></div>;
+  if (auth.error) return <div className="loginpage"><div className="notice bad">Cannot reach the server. Check that it is running, then reload.</div></div>;
+  if (!auth.authenticated) {
+    return <Login mode={auth.setupRequired ? 'setup' : 'login'} onDone={(username) => setAuth({ authDisabled: false, setupRequired: false, authenticated: true, username })} />;
+  }
+  const signOut = async () => {
+    try { await api.logout(); } catch { /* the session is gone either way */ }
+    setAuth((a) => ({ ...a, authenticated: false, username: null }));
+  };
+  return <Shell auth={auth} onSignOut={signOut} />;
+}
+
+function Shell({ auth, onSignOut }) {
   const [tab, setTab] = useState('library');
   const [collapsed, setCollapsed] = useState(read);
   const [appearance, setAppearanceState] = useState(loadAppearance);
@@ -37,6 +63,11 @@ export default function App() {
             </button>
           ))}
         </nav>
+        {!auth.authDisabled && (
+          <button className="collapse" onClick={onSignOut} title={`Sign out (${auth.username})`} aria-label="Sign out">
+            <Icon><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></Icon><span className="label">Sign out</span>
+          </button>
+        )}
         <button className="collapse" onClick={() => setCollapsed(!collapsed)} title={collapsed ? 'Expand menu' : 'Collapse menu'} aria-label={collapsed ? 'Expand menu' : 'Collapse menu'} aria-expanded={!collapsed}>
           <Icon><path d={collapsed ? 'M9 6l6 6-6 6' : 'M15 6l-6 6 6 6'} /></Icon><span className="label">Collapse</span>
         </button>
@@ -45,7 +76,7 @@ export default function App() {
         {/* Library stays mounted so search/selection survive tab switches */}
         <div hidden={tab !== 'library'}><Library goSettings={() => setTab('settings')} /></div>
         {tab === 'history' && <History />}
-        {tab === 'settings' && <Settings appearance={appearance} setAppearance={setAppearance} />}
+        {tab === 'settings' && <Settings appearance={appearance} setAppearance={setAppearance} auth={auth} onSignOut={onSignOut} />}
       </main>
     </div>
   );

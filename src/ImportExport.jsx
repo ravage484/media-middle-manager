@@ -69,6 +69,36 @@ export default function ImportExport() {
     setBusy(false);
   };
 
+  const [dbFile, setDbFile] = useState(null);
+  const [dbBusy, setDbBusy] = useState(false);
+
+  const downloadDb = async () => {
+    setMsg(null);
+    try {
+      const r = await fetch('/api/backup/db');
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText);
+      const blob = await r.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = (r.headers.get('content-disposition') || '').match(/filename="([^"]+)"/)?.[1] || 'mmm-backup.db';
+      a.click();
+      URL.revokeObjectURL(a.href);
+      setMsg({ ok: true, text: `Database backup downloaded (${(blob.size / 1024).toFixed(0)} KB).` });
+    } catch (e) { setMsg({ ok: false, text: e.message }); }
+  };
+
+  const restoreDb = async () => {
+    if (!window.confirm('Restore this backup?\n\nThis REPLACES all services, history and accounts with the backup, and signs everyone out. A safety copy of the current database is saved first.')) return;
+    setDbBusy(true); setMsg(null);
+    try {
+      const r = await api.restoreDb(dbFile);
+      setMsg({ ok: true, text: `Restored ${r.services} service(s), ${r.history} history entries and ${r.users} account(s). Your previous database was saved as ${r.safetyCopy} in the data folder. Reloading, then sign in with the account from the backup…` });
+      setDbFile(null);
+      setTimeout(() => window.location.reload(), 2500);
+    } catch (e) { setMsg({ ok: false, text: e.message }); }
+    setDbBusy(false);
+  };
+
   const d = file?.data;
   const hasKeys = d?.services.some((s) => s.apiKey || s.password);
   return (
@@ -110,6 +140,24 @@ export default function ImportExport() {
               <label className="check"><input type="checkbox" disabled={!d.history} checked={impHistory && !!d.history} onChange={(e) => setImpHistory(e.target.checked)} /> Import deletion history {mode === 'replace' ? '(replaces current)' : '(adds missing entries)'}</label>
               <label className="check"><input type="checkbox" disabled={!d.preferences} checked={impPrefs && !!d.preferences} onChange={(e) => setImpPrefs(e.target.checked)} /> Apply appearance and preferences in this browser</label>
               <div><button className="primary" onClick={doImport} disabled={busy}>{busy ? 'Importing…' : 'Import'}</button></div>
+            </>
+          )}
+        </div>
+      </section>
+
+      <section className="sgroup">
+        <h3>Database backup</h3>
+        <p className="dim">A complete copy of the database: services and their keys, history, and your account. Use it to back up or move the whole install exactly as it is. The file is safe to take while the app is running.</p>
+        <div className="form narrow">
+          <div className="notice">The API keys inside are encrypted, so the backup can only use them together with this install's key (<code>data/secret.key</code>, or the <code>MMM_SECRET_KEY</code> value). Back that up separately, because without it the keys cannot be recovered. The file also holds your password hash, so keep it private.</div>
+          <div><button className="primary" onClick={downloadDb}>Download database backup</button></div>
+
+          <h4>Restore a database backup</h4>
+          <input type="file" accept=".db,.sqlite,.sqlite3,application/vnd.sqlite3,application/octet-stream" onChange={(e) => { setMsg(null); setDbFile(e.target.files?.[0] || null); }} />
+          {dbFile && (
+            <>
+              <div className="notice bad">Restoring <b>replaces everything</b> (services, history and accounts) and signs everyone out. You will sign in with the account stored in the backup. A safety copy of the current database is saved in the data folder first.</div>
+              <div><button className="danger" onClick={restoreDb} disabled={dbBusy}>{dbBusy ? 'Restoring…' : `Restore ${dbFile.name}`}</button></div>
             </>
           )}
         </div>

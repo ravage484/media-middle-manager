@@ -1,5 +1,6 @@
 const j = async (r) => {
   const d = await r.json().catch(() => ({}));
+  if (r.status === 401 && !r.url.includes('/api/auth/')) window.dispatchEvent(new Event('mmm-unauthorized')); // session ended: show the sign-in page
   if (!r.ok) throw new Error(d.error || r.statusText);
   return d;
 };
@@ -7,6 +8,11 @@ const send = (method, url, body) =>
   fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(j);
 
 export const api = {
+  authStatus: () => fetch('/api/auth/status').then(j),
+  setup: (username, password) => send('POST', '/api/auth/setup', { username, password }),
+  login: (username, password) => send('POST', '/api/auth/login', { username, password }),
+  logout: () => send('POST', '/api/auth/logout', {}),
+  changePassword: (current, next) => send('POST', '/api/auth/password', { current, next }),
   library: (refresh) => fetch('/api/library' + (refresh ? '?refresh=1' : '')).then(j),
   services: () => fetch('/api/services').then(j),
   saveServices: (s) => send('PUT', '/api/services', s),
@@ -16,6 +22,8 @@ export const api = {
   history: () => fetch('/api/history').then(j),
   exportData: (secrets, history) => fetch(`/api/export?secrets=${secrets ? 1 : 0}&history=${history ? 1 : 0}`).then(j),
   importData: (data, options) => send('POST', '/api/import', { data, options }),
+  security: () => fetch('/api/security').then(j),
+  restoreDb: (file) => fetch('/api/restore', { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: file }).then(j),
 };
 
 export function watchLabel(w) {
