@@ -159,7 +159,7 @@ export default function ImportExport() {
       <section className="sgroup">
         <h3>Database backup</h3>
         <p className="dim">A complete copy of the database: services and their keys, history, and your account. Use it to back up or move the whole install exactly as it is. The file is safe to take while the app is running.</p>
-        <div className="form narrow">
+        <div className="form narrow fill">
           <div className="notice">The API keys inside are encrypted, so the backup can only use them together with this install's key (<code>data/secret.key</code>, or the <code>MMM_SECRET_KEY</code> value). Back that up separately, because without it the keys cannot be recovered. The file also holds your password hash, so keep it private.</div>
           <div><button className="primary" onClick={downloadDb}>Download database backup</button></div>
 

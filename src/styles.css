@@ -243,6 +243,7 @@ button.chip { font: inherit; font-size: 13px; color: inherit; cursor: pointer; }
 .dhead { display: flex; align-items: center; gap: 10px; }
 .form { display: flex; flex-direction: column; gap: 12px; }
 .form.narrow { max-width: 480px; }
+.form.narrow.fill { max-width: 760px; } /* as wide as the description above it (.sgroup > p) */
 .form label { display: flex; flex-direction: column; gap: 4px; color: var(--dim); }
 .form label.check { flex-direction: row; align-items: center; gap: 8px; color: var(--text); }
 .form input[type=checkbox] { padding: 0; }
@@ -280,3 +281,4 @@ button.chip { font: inherit; font-size: 13px; color: inherit; cursor: pointer; }
 .skipped td:nth-child(1) { width: 100%; overflow-wrap: anywhere; } /* the name takes whatever the other columns leave */
 .skipped td:nth-child(n+2) { white-space: nowrap; }
 .skipped p { margin: 0 0 6px; font-size: 13px; }
+.syncbox .lastrun { font-style: italic; font-weight: 300; color: var(--dim); font-size: 13px; }

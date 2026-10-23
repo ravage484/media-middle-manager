@@ -95,7 +95,7 @@ export default function LibrarySync() {
         ) : (
           <>
             <p>{st.cached} {st.cached === 1 ? 'title has' : 'titles have'} keywords loaded.
-              {st.finishedAt ? ` Last run finished ${when(st.finishedAt)} (${WHY[st.trigger] || st.trigger}).` : ''}</p>
+              {st.finishedAt && <><br /><span className="lastrun">Last run finished {when(st.finishedAt)} ({WHY[st.trigger] || st.trigger}).</span></>}</p>
             {st.failed > 0 && st.finishedAt && (
               <details className="skipped">
                 <summary><span>{st.failed} {st.failed === 1 ? 'title' : 'titles'} skipped</span><Icon name="chevronDown" size={14} /></summary>
