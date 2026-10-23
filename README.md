@@ -5,19 +5,21 @@
 <h1 align="center">Media Middle Manager</h1>
 
 <p align="center">
-  Browse your Radarr and Sonarr libraries as posters, then remove titles <em>everywhere</em> in one step, without anything trying to re-download them.
+  One place to browse and manage your whole media stack: your Radarr and Sonarr libraries, with Overseerr, qBittorrent, Tautulli and Plex alongside.
 </p>
 
 > [!WARNING]
-> **Early testing. Not ready for production.** This tool deletes media files and removes requests and torrents. Expect rough edges and breaking changes, and try it on a few throwaway titles first.
+> **Early testing. Not ready for production.** Some actions, such as removing a title or episodes, delete media files and remove requests and torrents. Expect rough edges and breaking changes, and try it on a few throwaway titles first.
 
 ---
 
-## Why this exists
+## What it is
 
-Deleting a movie from Plex is easy. Deleting it so it **stays deleted** is not. The request is still in Overseerr, the title is still monitored in Radarr or Sonarr (so it gets searched again), and the torrent is still seeding in qBittorrent.
+Running a media stack means juggling five or six apps, each with its own view of the same title. Media Middle Manager sits above them and gives you a single, poster-based view of your library, with the details from every service in one place: ratings, files, tags, sizes, watch history and where each title is managed.
 
-Media Middle Manager walks the whole stack for you, and keeps the history in Radarr and Sonarr so you still have a record that you once had the title.
+It started with the part that is hardest to do by hand, **keeping the library tidy**. Removing a movie from Plex is easy, but removing it so it *stays* removed is not: the request is still in Overseerr, the title is still monitored in Radarr or Sonarr (so it gets searched again), and the torrent is still seeding in qBittorrent. The app walks the whole stack for you and keeps the history in Radarr and Sonarr, so you still have a record that you once had the title.
+
+**Today** you can browse, search, filter and sort the whole library, inspect any title, and clean up whole titles or single episodes. **Next** is the other direction: searching for and requesting new media through Overseerr, then managing tags and more from the same screen (see the [roadmap](#roadmap)).
 
 ## Features
 
@@ -27,7 +29,16 @@ Media Middle Manager walks the whole stack for you, and keeps the history in Rad
 - Search, plus multi-select filters for type, status, instance, drive/root folder, genre and **tags** from Radarr and Sonarr.
 - Sort by total size, size per episode, episode count, title, date added, year, last watched or play count. Find what is eating your disks.
 - Size range filter and a running total for whatever the filters match.
-- Click a title for a details window: overview, genres, tags, size, status, watch history and the folder each instance manages.
+- Click a title for a details window styled like a request page: a backdrop header with an availability badge, the overview and tags, **ratings** (IMDb, TMDB, Rotten Tomatoes and Metacritic for movies, the combined score for shows), status, release or air dates, runtime, language, network or studio, external links, and each instance's folder. For a show, every season is listed as an expandable bar with its episode count and whether it is available, partially available or missing.
+
+**Keywords from Overseerr** (optional)
+- Overseerr shows TMDB keywords on every title page (*detective*, *island*, *heist*...). With Overseerr connected, the library gets a searchable **Keywords** filter built from them, so you can organize your media by theme.
+- Keeping them current is set under **Settings > Library sync**, and runs on the server even with the browser closed:
+  - **Manually:** *Load missing keywords* fetches only titles that have none; *Refresh everything* re-fetches all of them. Both show progress and can be stopped.
+  - **Checking for new titles:** every 5, 15 or 60 minutes the app looks at Radarr/Sonarr and fetches keywords for titles it has not seen (on by default).
+  - **On a schedule:** a full refresh daily, weekly (the default) or monthly. The first run loads your whole library, which can take a while.
+  - **Instantly, with a webhook (off by default):** add a *Webhook* connection in Radarr and Sonarr (*Settings > Connect*), triggers *On Import* plus *On Movie Added* or *On Series Add*, method POST, pointed at the address shown in Settings. New titles then get their keywords within seconds. The address carries a secret token (also accepted as an `X-Webhook-Token` header or the Basic-auth password); the call only prompts a re-check, and nothing in its body is used.
+- A title's window shows its keywords as chips beside your Radarr/Sonarr tags; click one to filter the library by it. The window also shows production countries and where the title streams (country set by `MMM_REGION`, default `US`).
 
 **Watch history** (optional)
 - Last watched and play counts from **Tautulli** (all Plex users) or **Plex** (token owner only).
@@ -36,6 +47,7 @@ Media Middle Manager walks the whole stack for you, and keeps the history in Rad
 **Delete**
 - Multi-select with shift-click ranges, select page, or select everything that matches.
 - A review window lists exactly what will be touched (requests, files, torrents) before anything happens.
+- **Delete individual episodes.** Open a show's details, choose *Choose episodes to delete…*, and tick episodes or whole seasons (shift-click for a range). Only those episodes are unmonitored and their files deleted; the rest of the show stays.
 - Per-step results afterwards, and a **History** tab recording every deletion and the space freed.
 
 **Make it yours**
@@ -57,6 +69,26 @@ For each selected title, in this order:
 6. Record the result in the database (shown on the History tab).
 
 Prowlarr can be added for a connection test, but the delete workflow does not use it.
+
+### Deleting individual episodes
+
+In a show's details window, *Choose episodes to delete…* lists every season and episode for each Sonarr that manages the show, with size, quality and air date. Ticking a season ticks every episode in it that has a file. The review window then shows what will happen, and the server re-checks everything when you press Delete. For the chosen episodes it does the same as a whole-show delete, in the same order and with the same safety rule:
+
+1. **Unmonitor** those episodes in Sonarr (their history stays).
+2. **Delete their files**, but only for a Sonarr where step 1 worked.
+3. **Remove torrents only when nothing else needs them.** This is the part that needs care, because a season pack serves many episodes:
+   - A torrent is removed only if **every** episode Sonarr has linked to it is also being deleted, or has no file any more. Choose one episode of a pack and the pack stays, and the review lists which episodes still need it.
+   - A download that **another show** also uses is never removed.
+   - If Sonarr cannot say what else uses a download (an error, or an incomplete answer), the torrent is kept.
+   - If any file failed to delete, no torrent is removed.
+4. Optionally rescan Plex, then record the result in the History tab (marked *Episodes*).
+
+Other things to know:
+
+- **Overseerr is not touched.** The show is still in your library, so its request stays valid. To remove a show completely, use Delete on the show itself.
+- **Double episodes** (one file holding `S01E04-E05`) must be chosen together, because deleting the file removes both. Ticking one half ticks the other, and the server refuses a selection that splits a file.
+- Episodes that have no file are shown greyed out and cannot be ticked.
+- This works for shows (Sonarr) only. Movies are a single file, so Delete already covers them.
 
 ### What is required?
 
@@ -109,6 +141,7 @@ Everything is configured in the UI under **Settings**. The server is configured 
 | `MMM_ADMIN_USER`, `MMM_ADMIN_PASSWORD` | unset | Create the first account at startup instead of using the setup page (only used while no account exists) |
 | `MMM_AUTH_DISABLED` | `false` | `true` turns sign-in off. Only for use behind a proxy that already authenticates users |
 | `MMM_HOST` | all interfaces | Address to listen on, for example `127.0.0.1` when a reverse proxy on the same machine is the only client |
+| `MMM_REGION` | `US` | Two-letter country whose streaming providers are shown in a title's window |
 | `MMM_TRUST_PROXY` | `false` | `true` when behind a reverse proxy, so the real client IP is used for login throttling and HTTPS is detected |
 
 Where each service's credentials come from:
@@ -245,6 +278,7 @@ Browser (React)  ->  /api  ->  Express  ->  Radarr / Sonarr / Overseerr / qBitto
 | `GET /api/library` | Merged library with tags, size and watch data (`?refresh=1` skips the cache) |
 | `POST /api/plan` | Preview what a delete would touch |
 | `POST /api/delete` | Run the delete steps |
+| `GET /api/episodes`, `POST /api/episodes/plan`, `POST /api/episodes/delete` | List a show's episodes, preview, and run a per-episode delete |
 | `GET /api/history` | Deletion history |
 | `GET/PUT /api/services`, `POST /api/services/test` | Manage and test connections |
 | `GET /api/export`, `POST /api/import` | Export and import settings (JSON) |

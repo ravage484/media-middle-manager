@@ -29,7 +29,7 @@ export default function Login({ mode, onDone }) {
       <form className="logincard" onSubmit={submit}>
         <div className="loginbrand"><Logo style={a.logo} theme={a.theme} size={48} /><h1>Media Middle Manager</h1></div>
         <h2>{setup ? 'Create your account' : 'Sign in'}</h2>
-        {setup && <p className="dim">First run. This account protects everything that can delete media, so choose a strong password.</p>}
+        {setup && <p className="dim">First run. This account protects your whole media stack, including actions that remove files, so choose a strong password.</p>}
         <label>Username
           <input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoFocus required />
         </label>

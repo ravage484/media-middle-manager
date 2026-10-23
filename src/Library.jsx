@@ -4,6 +4,7 @@ import DeleteDialog from './DeleteDialog.jsx';
 import MultiSelect from './MultiSelect.jsx';
 import Detail from './Detail.jsx';
 import Poster from './Poster.jsx';
+import Icon from './Icon.jsx';
 
 // Each sort returns an ascending comparator; the direction toggle flips it.
 const perEp = (i) => (i.type === 'show' && i.episodes ? i.size / i.episodes : i.size);
@@ -66,6 +67,11 @@ export default function Library({ goSettings }) {
   const [dialog, setDialog] = useState(null);
   const [detail, setDetail] = useState(null);
   const last = useRef(null);
+  const [kwSel, setKwSel] = useState(empty());
+  const [kw, setKw] = useState({ map: {}, status: { running: false, cached: 0 } }); // keywords from Overseerr, cached by the server
+
+  const loadKw = () => api.keywords().then(setKw).catch(() => {});
+  useEffect(() => { loadKw(); }, []);
 
   const load = (refresh) => {
     setLoading(true);
@@ -88,9 +94,17 @@ export default function Library({ goSettings }) {
     return { inst: [...inst], root: [...root].sort().map((r) => [r, r]), genre: [...genre].sort().map((g) => [g, g]), tag: [[UNTAGGED, '(no tags)'], ...tags] };
   }, [data.items]);
 
+  // Keyword options with how many titles carry each, most common first.
+  const kwOpts = useMemo(() => {
+    const n = new Map();
+    for (const i of data.items) (kw.map[i.key] || []).forEach((k) => n.set(k, (n.get(k) || 0) + 1));
+    return [...n].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([k, c]) => [k, `${k} (${c})`]);
+  }, [data.items, kw.map]);
+  const hasOverseerr = data.serviceTypes.includes('overseerr');
+
   const hasWatch = data.serviceTypes.includes('tautulli') || data.serviceTypes.includes('plex');
-  const filtered = !!(types.size || statuses.size || instances.size || roots.size || genres.size || tagSel.size || watches.size || staleDays || minGB || maxGB);
-  const clearFilters = () => { setTagSel(empty());setTypes(empty()); setStatuses(empty()); setInstances(empty()); setRoots(empty()); setGenres(empty()); setWatches(empty()); setStaleDays(''); setMinGB(''); setMaxGB(''); };
+  const filtered = !!(types.size || statuses.size || instances.size || roots.size || genres.size || tagSel.size || kwSel.size || watches.size || staleDays || minGB || maxGB);
+  const clearFilters = () => { setKwSel(empty()); setTagSel(empty());setTypes(empty()); setStatuses(empty()); setInstances(empty()); setRoots(empty()); setGenres(empty()); setWatches(empty()); setStaleDays(''); setMinGB(''); setMaxGB(''); };
 
   const shown = useMemo(() => {
     const t = q.trim().toLowerCase();
@@ -105,11 +119,12 @@ export default function Library({ goSettings }) {
         && (!roots.size || i.instances.some((n) => roots.has(n.root)))
         && (!genres.size || i.genres.some((g) => genres.has(g)))
         && (!tagSel.size || i.tags.some((g) => tagSel.has(g)) || (tagSel.has(UNTAGGED) && !i.tags.length))
+        && (!kwSel.size || (kw.map[i.key] || []).some((k) => kwSel.has(k)))
         && (!watches.size || [...watches].some((w) => WATCH_TEST[w](i)))
         && (!staleDays || stale(i, Number(staleDays)))
         && i.size >= min && i.size <= max)
       .sort((a, b) => (desc ? -1 : 1) * cmp(a, b));
-  }, [data.items, q, types, statuses, instances, roots, genres, tagSel, watches, staleDays, minGB, maxGB, sort, desc]);
+  }, [data.items, kw.map, kwSel, q, types, statuses, instances, roots, genres, tagSel, watches, staleDays, minGB, maxGB, sort, desc]);
   const shownBytes = useMemo(() => shown.reduce((n, i) => n + i.size, 0), [shown]);
 
   // Only the current page is rendered, which keeps the DOM (and poster requests) small.
@@ -121,11 +136,11 @@ export default function Library({ goSettings }) {
   const go = (p) => { setPage(Math.max(0, Math.min(pages - 1, p))); window.scrollTo({ top: 0 }); };
   const pager = shown.length > 0 && (
     <div className="pager">
-      <button onClick={() => go(0)} disabled={start === 0}>« First</button>
-      <button onClick={() => go(page - 1)} disabled={start === 0}>‹ Prev</button>
+      <button className="withicon" onClick={() => go(0)} disabled={start === 0}><Icon name="chevronsLeft" />First</button>
+      <button className="withicon" onClick={() => go(page - 1)} disabled={start === 0}><Icon name="chevronLeft" />Prev</button>
       <span>{start + 1}–{start + paged.length} of {shown.length} · page {Math.min(page, pages - 1) + 1} of {pages}</span>
-      <button onClick={() => go(page + 1)} disabled={page >= pages - 1}>Next ›</button>
-      <button onClick={() => go(pages - 1)} disabled={page >= pages - 1}>Last »</button>
+      <button className="withicon" onClick={() => go(page + 1)} disabled={page >= pages - 1}>Next<Icon name="chevronRight" /></button>
+      <button className="withicon" onClick={() => go(pages - 1)} disabled={page >= pages - 1}>Last<Icon name="chevronsRight" /></button>
       <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} title="Titles per page">
         {[100, 250, 500, 1000].map((n) => <option key={n} value={n}>{n} per page</option>)}
       </select>
@@ -162,7 +177,7 @@ export default function Library({ goSettings }) {
         <select value={sort} onChange={(e) => setSort(e.target.value)}>
           {Object.entries(SORTS).map(([k, [label]]) => <option key={k} value={k}>Sort: {label}</option>)}
         </select>
-        <button title="Toggle sort direction" onClick={() => setDesc(!desc)}>{desc ? '↓ High to low' : '↑ Low to high'}</button>
+        <button className="withicon" title="Toggle sort direction" onClick={() => setDesc(!desc)}><Icon name={desc ? 'arrowDown' : 'arrowUp'} />{desc ? 'High to low' : 'Low to high'}</button>
         <div className="seg">
           {['tile', 'grid', 'list'].map((v) => (
             <button key={v} className={view === v ? 'active' : ''} onClick={() => setView(v)}>{v}</button>
@@ -178,6 +193,7 @@ export default function Library({ goSettings }) {
         <MultiSelect label="Drive / root folder" options={opts.root} value={roots} onChange={setRoots} />
         <MultiSelect label="Genre" options={opts.genre} value={genres} onChange={setGenres} />
         <MultiSelect label="Tag" options={opts.tag} value={tagSel} onChange={setTagSel} />
+        {hasOverseerr && <MultiSelect label="Keywords" searchable options={kwOpts} value={kwSel} onChange={setKwSel} empty="No keywords yet. Settings > Library sync loads them from Overseerr." />}
         {hasWatch && <>
           <MultiSelect label="Watched" options={WATCH} value={watches} onChange={setWatches} />
           <span className="range">Not watched in <input type="number" min="1" placeholder="days" value={staleDays} onChange={(e) => setStaleDays(e.target.value)} /> days</span>
@@ -225,7 +241,7 @@ export default function Library({ goSettings }) {
               <div key={it.key} className={`card ${p.selected ? 'sel' : ''}`} onClick={p.onClick}>
                 <div className="poster">
                   <Poster item={it} />
-                  <span className="check" onClick={p.onCheck} title="Select">{p.selected ? '✓' : ''}</span>
+                  <span className="check" onClick={p.onCheck} title="Select">{p.selected ? <Icon name="check" size={14} /> : null}</span>
                   <span className="kind">{it.type === 'movie' ? 'Movie' : 'Series'}</span>
                   <span className="size">{fmtBytes(it.size)}</span>
                   {!it.hasFile && <span className="nofile">No file</span>}
@@ -258,8 +274,11 @@ export default function Library({ goSettings }) {
         <Detail
           item={data.items.find((i) => i.key === detail)}
           hasWatch={hasWatch}
+          hasPlex={data.serviceTypes.includes('plex')}
+          onKeyword={(k) => { setKwSel(new Set([k])); setDetail(null); window.scrollTo({ top: 0 }); }}
           onClose={() => setDetail(null)}
           onDelete={() => { setDetail(null); setDialog([detail]); }}
+          onChanged={() => load(true)}
         />
       )}
 

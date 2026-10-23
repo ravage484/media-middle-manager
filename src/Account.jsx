@@ -12,7 +12,7 @@ export default function Account({ auth, onSignOut }) {
     return (
       <section className="sgroup">
         <h3>Account</h3>
-        <div className="notice bad">Sign-in is turned off for this server (<code>MMM_AUTH_DISABLED=true</code>). Anyone who can reach it can delete media, so only do this behind a proxy that authenticates users.</div>
+        <div className="notice bad">Sign-in is turned off for this server (<code>MMM_AUTH_DISABLED=true</code>). Anyone who can reach it can manage your media stack and delete files, so only do this behind a proxy that authenticates users.</div>
       </section>
     );
   }

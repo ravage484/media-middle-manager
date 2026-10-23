@@ -3,6 +3,9 @@ import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { getServices, saveServices, getHistory, getLibrary, plan, execute, testService, exportData, importData, resetLibraryCache, cleanService } from './lib.js';
+import { listEpisodes, planEpisodes, executeEpisodes } from './episodes.js';
+import { getDetails } from './details.js';
+import { keywordsPayload, startSync, stopSync, setAuto, syncStatus, tick, acceptHook, hookToken } from './keywords.js';
 import { snapshot, restoreFrom, DATA, securityInfo } from './db.js';
 import { authRoutes, requireAuth, sameOrigin, bootstrapAdmin, AUTH_DISABLED } from './auth.js';
 
@@ -35,9 +38,15 @@ const bigJson = express.json({ limit: '20mb' }); // an import can carry a long h
 app.use((req, res, next) => (req.method === 'POST' && req.path === '/api/import' ? next() : smallJson(req, res, next)));
 app.use('/api', sameOrigin);
 authRoutes(app); // /api/auth/* handles its own access rules
+// Radarr/Sonarr "Connect > Webhook" calls this when something is added or imported. It has its own secret token instead of a session.
+app.post('/api/hooks/library', (req, res) => {
+  const code = acceptHook(req);
+  res.status(code).json(code === 200 ? { ok: true } : { error: { 401: 'Wrong token', 404: 'Not found', 429: 'Too many attempts' }[code] });
+});
 app.use('/api', requireAuth); // everything below needs a signed-in user
 
-const wrap = (fn) => (req, res) => Promise.resolve(fn(req, res)).catch((e) => res.status(500).json({ error: e.message }));
+// Errors marked userError (bad selection, show not found) are the caller's mistake: 400, not 500.
+const wrap = (fn) => (req, res) => Promise.resolve(fn(req, res)).catch((e) => res.status(e.userError ? 400 : 500).json({ error: e.message }));
 const bad = (res, msg) => res.status(400).json({ error: msg });
 const mask = (s) => ({ ...s, apiKey: s.apiKey ? MASK : '', password: s.password ? MASK : '' });
 // Replace masked secrets with the stored ones.
@@ -99,6 +108,51 @@ app.post('/api/delete', wrap(async (req, res) => {
   res.json(await execute(keys, options));
 }));
 app.get('/api/history', (req, res) => res.json(getHistory()));
+
+// Per-episode delete (shows only). The key must be a show; the selection says which episodes in which Sonarr.
+const SHOW_KEY_RE = /^show:[A-Za-z0-9@._-]{1,120}$/;
+function cleanShowKey(k) { if (typeof k !== 'string' || !SHOW_KEY_RE.test(k)) throw new Error('Expected a show'); return k; }
+function cleanSelection(sel) {
+  if (!Array.isArray(sel) || !sel.length || sel.length > 20) throw new Error('Expected a selection of episodes');
+  return sel.map((s) => {
+    s = asObject(s);
+    const ids = s.episodeIds;
+    if (typeof s.serviceId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(s.serviceId)) throw new Error('Invalid service in the selection');
+    if (!Array.isArray(ids) || !ids.length || ids.length > 5000 || !ids.every((n) => Number.isInteger(n) && n > 0)) throw new Error('Invalid episode ids in the selection');
+    return { serviceId: s.serviceId, episodeIds: ids };
+  });
+}
+// Keywords from Overseerr (TMDB), cached so the library can filter by them. The sync runs in the background.
+app.get('/api/keywords', (req, res) => res.json(keywordsPayload()));
+app.post('/api/keywords/sync', wrap(async (req, res) => res.json(await startSync({ force: asObject(req.body).force === true }))));
+app.post('/api/keywords/stop', (req, res) => res.json(stopSync()));
+app.post('/api/keywords/webhook/token', (req, res) => { hookToken(true); res.json(syncStatus()); }); // a new token; the old one stops working
+app.put('/api/keywords/auto', wrap(async (req, res) => {
+  setAuto(req.body);
+  tick(); // switching something on takes effect now, not at the next minute
+  res.json(syncStatus());
+}));
+
+// Backdrop, ratings, dates and links for one title's window.
+app.get('/api/details', wrap(async (req, res) => {
+  let key; try { key = cleanKeys([req.query.key])[0]; } catch { return bad(res, 'Expected a title'); }
+  res.json(await getDetails(key));
+}));
+app.get('/api/episodes', wrap(async (req, res) => {
+  let key; try { key = cleanShowKey(req.query.key); } catch (e) { return bad(res, e.message); }
+  res.json(await listEpisodes(key));
+}));
+app.post('/api/episodes/plan', wrap(async (req, res) => {
+  let key, selection;
+  try { key = cleanShowKey(asObject(req.body).key); selection = cleanSelection(asObject(req.body).selection); } catch (e) { return bad(res, e.message); }
+  res.json(await planEpisodes(key, selection));
+}));
+app.post('/api/episodes/delete', wrap(async (req, res) => {
+  let key, selection;
+  try { key = cleanShowKey(asObject(req.body).key); selection = cleanSelection(asObject(req.body).selection); } catch (e) { return bad(res, e.message); }
+  const o = asObject(asObject(req.body).options);
+  res.json(await executeEpisodes(key, selection, { torrents: o.torrents === true, plex: o.plex === true })); // files are the point; nothing else is on by default
+}));
 
 app.get('/api/export', wrap((req, res) => {
   res.json(exportData({ secrets: req.query.secrets === '1', history: req.query.history !== '0' }));

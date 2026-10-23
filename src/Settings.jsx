@@ -4,8 +4,9 @@ import Appearance from './Appearance.jsx';
 import DeleteDefaults from './DeleteDefaults.jsx';
 import ImportExport from './ImportExport.jsx';
 import Account from './Account.jsx';
+import LibrarySync from './LibrarySync.jsx';
 
-const TABS = [['services', 'Services'], ['appearance', 'Appearance'], ['delete', 'Delete defaults'], ['backup', 'Import / Export'], ['account', 'Account']];
+const TABS = [['services', 'Services'], ['sync', 'Library sync'], ['appearance', 'Appearance'], ['delete', 'Delete defaults'], ['backup', 'Import / Export'], ['account', 'Account']];
 
 export default function Settings({ appearance, setAppearance, auth, onSignOut }) {
   const [tab, setTab] = useState('services');
@@ -18,6 +19,7 @@ export default function Settings({ appearance, setAppearance, auth, onSignOut })
         ))}
       </div>
       {tab === 'services' && <Services />}
+      {tab === 'sync' && <LibrarySync />}
       {tab === 'appearance' && <Appearance appearance={appearance} setAppearance={setAppearance} />}
       {tab === 'delete' && <DeleteDefaults />}
       {tab === 'backup' && <ImportExport />}

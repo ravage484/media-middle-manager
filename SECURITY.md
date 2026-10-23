@@ -1,6 +1,6 @@
 # Security policy
 
-Media Middle Manager can delete files and remove requests and torrents, and it stores API keys for your media services, so security reports are taken seriously. The project is in early testing and is not yet recommended for production use.
+Media Middle Manager manages your media stack: it stores API keys for your media services and can change them, including deleting files and removing requests and torrents, so security reports are taken seriously. The project is in early testing and is not yet recommended for production use.
 
 ## Reporting a vulnerability
 
