@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { api } from './api.js';
 import Logo from './Logo.jsx';
 import { loadAppearance } from './themes.js';
+import { VERSION } from './version.js';
 
 // mode "setup": first run, create the account. mode "login": sign in.
 export default function Login({ mode, onDone }) {
@@ -45,6 +46,7 @@ export default function Login({ mode, onDone }) {
         {err && <div className="notice bad">{err}</div>}
         <button className="primary" disabled={busy}>{busy ? 'Please wait…' : setup ? 'Create account' : 'Sign in'}</button>
       </form>
+      <small className="loginver dim">Media Middle Manager v{VERSION}</small>
     </div>
   );
 }

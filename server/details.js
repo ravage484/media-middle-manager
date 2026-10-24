@@ -91,8 +91,10 @@ export async function getDetails(key) {
   const overseerr = overseerrService();
   if (overseerr && item.tmdbId) {
     try {
-      const m = await fetchOverseerrMeta(item, overseerr);
+      const m = await fetchOverseerrMeta(item, overseerr, { withRatings: isShow });
       if (m) {
+        // Sonarr gives a show one unnamed score; Overseerr's are named (TMDB, Rotten Tomatoes), so they win when there are any.
+        if (m.ratings?.length) merged.ratings = m.ratings;
         setKeywords(item.key, m.keywords); // opening a title also refreshes its cached keywords
         merged.keywords = m.keywords; merged.countries = m.countries; merged.providers = m.providers; merged.region = REGION;
       }

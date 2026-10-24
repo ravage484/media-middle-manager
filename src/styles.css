@@ -88,13 +88,6 @@ td .tags { display: inline-flex; margin: 0 0 0 4px; }
 .grid .size { display: block; }
 
 .filters { align-items: center; }
-.multi { position: relative; }
-.multi summary { list-style: none; cursor: pointer; background: var(--panel); border: 1px solid var(--panel2); border-radius: 8px; padding: 8px 12px; user-select: none; }
-.multi summary::-webkit-details-marker { display: none; }
-.multi summary.on { border-color: var(--accent); }
-.multi .menu { position: absolute; top: 100%; left: 0; margin-top: 4px; min-width: 200px; max-height: 320px; overflow-y: auto; background: var(--panel); border: 1px solid var(--panel2); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 4px; z-index: 6; box-shadow: 0 8px 30px #000a; }
-.multi .menu label { white-space: nowrap; }
-.menu input, .range input { padding: 0; }
 .range { display: flex; gap: 6px; align-items: center; color: var(--dim); }
 .range input { width: 80px; padding: 6px 8px; }
 
@@ -117,6 +110,7 @@ table.list { width: 100%; border-collapse: collapse; }
 .ptitle { font-weight: 600; }
 .plan ul, .history ul { margin: 4px 0 0; padding-left: 20px; }
 .warn { color: var(--warn); }
+.ok { color: var(--ok); }
 .buttons { display: flex; justify-content: flex-end; gap: 8px; }
 
 .settings { max-width: 1100px; }
@@ -155,9 +149,6 @@ table.list { width: 100%; border-collapse: collapse; }
 .form input[type=file] { padding: 8px; }
 .overlay.stacked { z-index: 30; }
 .eppicker { margin-top: 4px; }
-.eptools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 0; margin-bottom: 10px; background: var(--bg); border-bottom: 1px solid var(--panel2); position: sticky; top: 0; z-index: 2; }
-.eptools .spacer { flex: 1; }
-.eptools button { padding: 6px 12px; }
 .epinst h5 { margin: 14px 0 8px; font-size: 14px; color: var(--dim); }
 .season { border: 1px solid var(--panel2); border-radius: 10px; margin-bottom: 8px; overflow: hidden; background: var(--panel); }
 .seasonhead { display: flex; align-items: center; gap: 12px; padding: 12px 14px; cursor: pointer; }
@@ -213,7 +204,6 @@ table.list { width: 100%; border-collapse: collapse; }
 .chip { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--panel2); background: var(--panel); border-radius: 99px; padding: 3px 12px; font-size: 13px; }
 button.chip { font: inherit; font-size: 13px; color: inherit; cursor: pointer; }
 .chip.kw:hover { border-color: var(--accent); }
-.menusearch { width: 100%; padding: 6px 8px; margin-bottom: 2px; }
 .chip.small { padding: 1px 9px; font-size: 12px; color: var(--dim); }
 .dside { flex: 0 0 310px; margin-top: 18px; }
 .infocard { background: var(--panel); border: 1px solid var(--panel2); border-radius: 10px; overflow: hidden; }
@@ -282,3 +272,123 @@ button.chip { font: inherit; font-size: 13px; color: inherit; cursor: pointer; }
 .skipped td:nth-child(n+2) { white-space: nowrap; }
 .skipped p { margin: 0 0 6px; font-size: 13px; }
 .syncbox .lastrun { font-style: italic; font-weight: 300; color: var(--dim); font-size: 13px; }
+
+/* "..." button on a poster, and the menu it opens */
+.kebab { position: absolute; top: 8px; right: 8px; opacity: 0; background: #0008; border-color: transparent; color: #fff; padding: 4px 6px; }
+.card:hover .kebab, .kebab:focus-visible { opacity: 1; }
+.kebab:hover { background: #000c; }
+td.rowbtns { white-space: nowrap; }
+td.rowbtns .icon + .icon { margin-left: 4px; }
+.ctxmenu { position: fixed; z-index: 40; min-width: 230px; max-width: 300px; background: var(--panel); border: 1px solid var(--panel2); border-radius: 10px; padding: 6px; box-shadow: 0 10px 34px #000b; display: flex; flex-direction: column; }
+.ctxmenu .mitem { display: flex; align-items: center; gap: 10px; text-align: left; background: none; border: 0; border-radius: 6px; padding: 8px 10px; color: var(--text); }
+.ctxmenu .mitem:hover:not(:disabled) { background: var(--panel2); }
+.ctxmenu .mitem:disabled { opacity: .5; cursor: default; }
+.ctxmenu .mitem.danger { color: var(--danger); }
+.ctxmenu .msep { height: 1px; background: var(--panel2); margin: 4px 2px; }
+.ctxmenu .mnote { padding: 6px 10px; font-size: 13px; color: var(--dim); }
+.ctxmenu .mnote.ok { color: var(--ok, var(--text)); }
+.ctxmenu .mnote.bad { color: var(--danger); }
+.plist { display: flex; flex-direction: column; max-height: 320px; overflow-y: auto; border: 1px solid var(--panel2); border-radius: 8px; }
+.plist label { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--panel2); cursor: pointer; }
+.plist label:last-child { border-bottom: 0; }
+.plist label:hover { background: var(--panel); }
+.plist label span { flex: 1; overflow-wrap: anywhere; }
+.plist label.busy { opacity: .6; }
+.plist input[type=checkbox] { padding: 0; }
+.plist .pempty { padding: 12px; }
+.pnew { display: flex; gap: 8px; flex-wrap: wrap; }
+.pnew input { flex: 1 1 160px; min-width: 0; }
+
+/* ratings: logo or name under the score */
+.rate .ratelogo { height: 14px; width: auto; max-width: 70px; object-fit: contain; display: block; margin: 2px auto 0; }
+
+/* recommendations row at the bottom of a title window */
+.recs { margin-top: 22px; }
+.recshead { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.recshead h3 { margin: 0; }
+.seg.small button { padding: 4px 10px; font-size: 13px; }
+.recrow { display: flex; gap: 12px; overflow-x: auto; padding: 10px 2px 12px; }
+.rcard { flex: 0 0 132px; display: flex; flex-direction: column; gap: 2px; text-align: left; background: none; border: 0; padding: 0; color: var(--text); text-decoration: none; cursor: pointer; }
+.rcard b { font-size: 13px; line-height: 1.25; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.rcard small { font-size: 12px; }
+.rposter { position: relative; aspect-ratio: 2 / 3; border-radius: 8px; overflow: hidden; background: var(--panel); display: grid; place-items: center; text-align: center; padding: 6px; outline: 2px solid transparent; }
+.rcard:hover .rposter { outline-color: var(--accent); }
+.rposter img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.rbadge { position: absolute; left: 6px; bottom: 6px; font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 99px; color: #fff; background: #4b5563; }
+.rbadge.ok { background: #16a34a; } .rbadge.warn { background: #d97706; }
+.rrate { position: absolute; right: 6px; top: 6px; font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 6px; background: #000a; color: #fff; }
+.rmore { flex: 0 0 90px; align-self: center; border: 1px dashed var(--panel2); border-radius: 8px; padding: 12px 8px; text-align: center; color: var(--dim); }
+.recwrap { position: relative; }
+.recrow { cursor: grab; scrollbar-width: thin; }
+.recrow.dragging { cursor: grabbing; user-select: none; }
+.recrow .rcard, .recrow img { -webkit-user-drag: none; user-select: none; }
+.rarrow { position: absolute; top: 38%; z-index: 2; width: 34px; height: 34px; padding: 0; border-radius: 50%; display: grid; place-items: center; background: #000c; border-color: transparent; color: #fff; opacity: 0; transition: opacity .15s; }
+.recwrap:hover .rarrow { opacity: 1; }
+.rarrow:hover { background: #000; }
+.rarrow.l { left: 4px; } .rarrow.r { right: 4px; }
+.recctl { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.recfilter { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--dim); cursor: pointer; white-space: nowrap; }
+.recfilter input { padding: 0; }
+.recrow { transition: opacity .15s; }
+.recrow.stale { opacity: .45; pointer-events: none; }
+
+/* episode picker: the action bar appears once something is ticked; seasons past the first few fold away under a fade */
+.epbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; position: sticky; bottom: 0; z-index: 3; margin-top: 10px; padding: 10px 12px; background: var(--panel); border: 1px solid var(--panel2); border-radius: 10px; box-shadow: 0 -8px 24px #0008; animation: barin .15s ease-out; }
+.epbar .spacer { flex: 1; }
+.epbar button { padding: 6px 12px; }
+@keyframes barin { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.peek { position: relative; }
+.peekclip { max-height: 58px; overflow: hidden; pointer-events: none; user-select: none; -webkit-mask-image: linear-gradient(#000 0%, transparent 92%); mask-image: linear-gradient(#000 0%, transparent 92%); }
+.showmore { position: absolute; left: 50%; bottom: 2px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 6px; background: none; border: 0; color: var(--accent); font-weight: 600; padding: 6px 12px; }
+.showmore:hover { text-decoration: underline; background: none; }
+.showless { display: flex; justify-content: center; padding: 4px 0; }
+.showmore.inline { position: static; transform: none; }
+
+/* app version: sidebar, sign-in page, Settings > About */
+.side .ver { justify-content: center; padding: 2px 0 0; font-size: 11px; color: var(--dim); opacity: .7; }
+.side .ver:hover:not(:disabled) { background: none; opacity: 1; }
+.loginver { margin-top: 12px; text-align: center; }
+.loginpage { align-content: center; }
+dl.about { display: grid; grid-template-columns: max-content 1fr; gap: 8px 24px; margin: 14px 0; }
+dl.about > div { display: contents; }
+dl.about dt { color: var(--dim); }
+dl.about dd { margin: 0; }
+
+/* filters: a button, a row of chips for what is applied, and a side panel */
+.filtersbtn.on { border-color: var(--accent); }
+.chiprow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: -2px 0 10px; }
+.fchip { display: inline-flex; align-items: center; background: var(--panel); border: 1px solid var(--panel2); border-radius: 99px; overflow: hidden; font-size: 13px; }
+.fchip button { background: none; border: 0; border-radius: 0; color: var(--text); padding: 4px 8px; }
+.fchip .fchiptext { padding-left: 12px; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fchip .fchiptext b { color: var(--dim); font-weight: 600; }
+.fchip .fchipx { display: grid; place-items: center; padding: 4px 9px 4px 4px; color: var(--dim); }
+.fchip .fchipx:hover { color: var(--danger); background: none; }
+.fchip .fchiptext:hover { background: var(--panel2); }
+.fpanel { position: fixed; top: 0; right: 0; bottom: 0; width: min(380px, 100vw); z-index: 15; display: flex; flex-direction: column; background: var(--bg); border-left: 1px solid var(--panel2); box-shadow: -12px 0 40px #0009; animation: panelin .15s ease-out; }
+@keyframes panelin { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+.fpanel header { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--panel2); }
+.fpanel header h3 { margin: 0; }
+.fpanel .spacer { flex: 1; }
+.fscroll { flex: 1; overflow-y: auto; padding: 4px 16px; }
+.fpanel footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--panel2); }
+.fsec { border-bottom: 1px solid var(--panel); }
+.fsec summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 12px 0; font-weight: 600; user-select: none; }
+.fsec summary::-webkit-details-marker { display: none; }
+.fsec summary span:first-child { flex: 1; }
+.fsec .fchev { color: var(--dim); transition: transform .15s; }
+.fsec[open] .fchev { transform: rotate(180deg); }
+.fcount { background: var(--accent); color: var(--on-accent); font-size: 11px; min-width: 18px; height: 18px; border-radius: 99px; display: inline-grid; place-items: center; padding: 0 6px; }
+.fbody { padding: 0 0 14px; }
+.fchips { display: flex; flex-wrap: wrap; gap: 6px; }
+.fchips button { border-radius: 99px; padding: 5px 12px; font-size: 13px; }
+.fchips button.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.fchecks { display: flex; flex-direction: column; gap: 8px; }
+.fchecks > input { width: 100%; box-sizing: border-box; }
+.flist { display: flex; flex-direction: column; gap: 2px; max-height: 240px; overflow-y: auto; }
+.flist label { display: flex; align-items: center; gap: 8px; padding: 3px 2px; cursor: pointer; }
+.flist input { padding: 0; }
+.fbody .range input { width: 80px; }
+
+.refreshbtn { display: inline-grid; place-items: center; padding: 8px 10px; }
+.refreshbtn.spin svg { animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }

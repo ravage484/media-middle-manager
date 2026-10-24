@@ -1,22 +1,30 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, fmtBytes, watchLabel } from './api.js';
 import DeleteDialog from './DeleteDialog.jsx';
-import MultiSelect from './MultiSelect.jsx';
+import FilterPanel from './FilterPanel.jsx';
 import Detail from './Detail.jsx';
 import Poster from './Poster.jsx';
 import Icon from './Icon.jsx';
+import ItemMenu from './ItemMenu.jsx';
+import PlexListDialog from './PlexListDialog.jsx';
 
 // Each sort returns an ascending comparator; the direction toggle flips it.
 const perEp = (i) => (i.type === 'show' && i.episodes ? i.size / i.episodes : i.size);
+// Each sort is [name, ascending comparator, [label when high to low, label when low to high]]; the direction button names the order
+// in terms of what is being sorted.
+const LARGEST = ['Largest first', 'Smallest first'];
+const MOST = ['Most first', 'Fewest first'];
+const NEWEST = ['Newest first', 'Oldest first'];
 const SORTS = {
-  size: ['Total size', (a, b) => a.size - b.size],
-  perep: ['Size per episode', (a, b) => perEp(a) - perEp(b)],
-  episodes: ['Episode count', (a, b) => a.episodes - b.episodes],
-  title: ['Title', (a, b) => a.title.localeCompare(b.title)],
-  added: ['Date added', (a, b) => (a.added || '').localeCompare(b.added || '')],
-  year: ['Year', (a, b) => (a.year || 0) - (b.year || 0)],
-  last: ['Last watched', (a, b) => (a.watch?.last || 0) - (b.watch?.last || 0)],
-  plays: ['Play count', (a, b) => (a.watch?.plays || 0) - (b.watch?.plays || 0)],
+  size: ['Total size', (a, b) => a.size - b.size, LARGEST],
+  perep: ['Size per episode', (a, b) => perEp(a) - perEp(b), LARGEST],
+  episodes: ['Episode count', (a, b) => a.episodes - b.episodes, MOST],
+  title: ['Title', (a, b) => a.title.localeCompare(b.title), ['Z to A', 'A to Z']],
+  added: ['Date added', (a, b) => (a.added || '').localeCompare(b.added || ''), NEWEST],
+  year: ['Year', (a, b) => (a.year || 0) - (b.year || 0), NEWEST],
+  rating: ['Rating', (a, b) => (a.rating || 0) - (b.rating || 0), ['Highest first', 'Lowest first']], // titles without a rating count as 0, so they sit last when sorting high to low
+  last: ['Last watched', (a, b) => (a.watch?.last || 0) - (b.watch?.last || 0), ['Most recent first', 'Least recent first']],
+  plays: ['Play count', (a, b) => (a.watch?.plays || 0) - (b.watch?.plays || 0), MOST],
 };
 const WATCH = [['never', 'Never watched'], ['watched', 'Watched'], ['unknown', 'Not found in Plex/Tautulli']];
 const WATCH_TEST = { never: (i) => i.watch && !i.watch.plays, watched: (i) => i.watch?.plays > 0, unknown: (i) => !i.watch };
@@ -66,12 +74,20 @@ export default function Library({ goSettings }) {
   const [selected, setSelected] = useState(new Set());
   const [dialog, setDialog] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [menu, setMenu] = useState(null); // { item, rect }: the "..." menu of one title
+  const [plexList, setPlexList] = useState(null); // { kind, item, info }: choosing collections or playlists
   const last = useRef(null);
   const [kwSel, setKwSel] = useState(empty());
+  const [panel, setPanel] = useState(false); // the filters panel
+  const [colSel, setColSel] = useState(empty());
+  const [plSel, setPlSel] = useState(empty());
+  const [plex, setPlex] = useState({ map: {}, status: {} }); // what Plex says about each title, cached by the server
   const [kw, setKw] = useState({ map: {}, status: { running: false, cached: 0 } }); // keywords from Overseerr, cached by the server
 
   const loadKw = () => api.keywords().then(setKw).catch(() => {});
   useEffect(() => { loadKw(); }, []);
+  const loadPlex = () => api.plexCache().then(setPlex).catch(() => {});
+  useEffect(() => { loadPlex(); }, []);
 
   const load = (refresh) => {
     setLoading(true);
@@ -101,10 +117,43 @@ export default function Library({ goSettings }) {
     return [...n].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([k, c]) => [k, `${k} (${c})`]);
   }, [data.items, kw.map]);
   const hasOverseerr = data.serviceTypes.includes('overseerr');
+  // Collections and playlists that Plex has, with how many library titles are in each.
+  const plexOpts = useMemo(() => {
+    const col = new Map(), pl = new Map();
+    for (const i of data.items) {
+      const e = plex.map[i.key];
+      e?.collections.forEach((c) => col.set(c, (col.get(c) || 0) + 1));
+      e?.playlists.forEach((p) => pl.set(p, (pl.get(p) || 0) + 1));
+    }
+    const fmt = (m) => [...m].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([k, c]) => [k, `${k} (${c})`]);
+    return { col: fmt(col), pl: fmt(pl) };
+  }, [data.items, plex.map]);
 
   const hasWatch = data.serviceTypes.includes('tautulli') || data.serviceTypes.includes('plex');
-  const filtered = !!(types.size || statuses.size || instances.size || roots.size || genres.size || tagSel.size || kwSel.size || watches.size || staleDays || minGB || maxGB);
-  const clearFilters = () => { setKwSel(empty()); setTagSel(empty());setTypes(empty()); setStatuses(empty()); setInstances(empty()); setRoots(empty()); setGenres(empty()); setWatches(empty()); setStaleDays(''); setMinGB(''); setMaxGB(''); };
+  // Every filter in one list: the panel shows them as sections, and the chips under the toolbar show the ones in use.
+  const defs = [
+    { id: 'types', label: 'Type', kind: 'chips', options: [['movie', 'Movies'], ['show', 'Shows']], value: types, set: setTypes },
+    { id: 'statuses', label: 'Status', kind: 'chips', options: STATUS, value: statuses, set: setStatuses },
+    hasWatch && { id: 'watches', label: 'Watched', kind: 'chips', options: WATCH, value: watches, set: setWatches },
+    { id: 'genres', label: 'Genre', kind: 'list', options: opts.genre, value: genres, set: setGenres },
+    hasOverseerr && { id: 'kw', label: 'Keywords', kind: 'list', plain: true, options: kwOpts, value: kwSel, set: setKwSel, empty: 'No keywords yet. Settings > Library sync loads them from Overseerr.' },
+    { id: 'tags', label: 'Tag', kind: 'list', options: opts.tag, value: tagSel, set: setTagSel },
+    plexOpts.col.length > 0 && { id: 'col', label: 'Plex collection', kind: 'list', plain: true, options: plexOpts.col, value: colSel, set: setColSel },
+    plexOpts.pl.length > 0 && { id: 'pl', label: 'Plex playlist', kind: 'list', plain: true, options: plexOpts.pl, value: plSel, set: setPlSel },
+    opts.inst.length > 1 && { id: 'inst', label: 'Instance', kind: 'chips', options: opts.inst, value: instances, set: setInstances },
+    opts.root.length > 1 && { id: 'roots', label: 'Drive / root folder', kind: 'list', options: opts.root, value: roots, set: setRoots },
+  ].filter(Boolean);
+  // One chip per filter in use, with a way to clear just that one.
+  const chips = [
+    ...defs.filter((d) => d.value.size).map((d) => {
+      const names = [...d.value].map((v) => (d.plain ? v : d.options.find(([k]) => k === v)?.[1] ?? v));
+      return { id: d.id, label: d.label, text: names.length > 2 ? `${names.slice(0, 2).join(', ')} +${names.length - 2}` : names.join(', '), clear: () => d.set(empty()) };
+    }),
+    staleDays && { id: 'stale', label: 'Not watched in', text: `${staleDays} days`, clear: () => setStaleDays('') },
+    (minGB || maxGB) && { id: 'size', label: 'Size', text: `${minGB || 0} to ${maxGB || '∞'} GB`, clear: () => { setMinGB(''); setMaxGB(''); } },
+  ].filter(Boolean);
+  const filtered = !!(types.size || statuses.size || instances.size || roots.size || genres.size || tagSel.size || kwSel.size || colSel.size || plSel.size || watches.size || staleDays || minGB || maxGB);
+  const clearFilters = () => { setColSel(empty()); setPlSel(empty()); setKwSel(empty()); setTagSel(empty());setTypes(empty()); setStatuses(empty()); setInstances(empty()); setRoots(empty()); setGenres(empty()); setWatches(empty()); setStaleDays(''); setMinGB(''); setMaxGB(''); };
 
   const shown = useMemo(() => {
     const t = q.trim().toLowerCase();
@@ -120,11 +169,13 @@ export default function Library({ goSettings }) {
         && (!genres.size || i.genres.some((g) => genres.has(g)))
         && (!tagSel.size || i.tags.some((g) => tagSel.has(g)) || (tagSel.has(UNTAGGED) && !i.tags.length))
         && (!kwSel.size || (kw.map[i.key] || []).some((k) => kwSel.has(k)))
+        && (!colSel.size || (plex.map[i.key]?.collections || []).some((c) => colSel.has(c)))
+        && (!plSel.size || (plex.map[i.key]?.playlists || []).some((p) => plSel.has(p)))
         && (!watches.size || [...watches].some((w) => WATCH_TEST[w](i)))
         && (!staleDays || stale(i, Number(staleDays)))
         && i.size >= min && i.size <= max)
       .sort((a, b) => (desc ? -1 : 1) * cmp(a, b));
-  }, [data.items, kw.map, kwSel, q, types, statuses, instances, roots, genres, tagSel, watches, staleDays, minGB, maxGB, sort, desc]);
+  }, [data.items, kw.map, kwSel, plex.map, colSel, plSel, q, types, statuses, instances, roots, genres, tagSel, watches, staleDays, minGB, maxGB, sort, desc]);
   const shownBytes = useMemo(() => shown.reduce((n, i) => n + i.size, 0), [shown]);
 
   // Only the current page is rendered, which keeps the DOM (and poster requests) small.
@@ -167,6 +218,7 @@ export default function Library({ goSettings }) {
     onClick: (e) => (selected.size > 0 || e.shiftKey || e.ctrlKey || e.metaKey ? toggle(idx, e) : setDetail(item.key)),
     onCheck: (e) => { e.stopPropagation(); toggle(idx, e); },
     onDelete: (e) => { e.stopPropagation(); setDialog([item.key]); },
+    onMenu: (e) => { e.stopPropagation(); setMenu({ item, rect: e.currentTarget.getBoundingClientRect() }); },
   });
   const noServices = !loading && !data.items.length && !data.errors.length && !err;
 
@@ -177,33 +229,27 @@ export default function Library({ goSettings }) {
         <select value={sort} onChange={(e) => setSort(e.target.value)}>
           {Object.entries(SORTS).map(([k, [label]]) => <option key={k} value={k}>Sort: {label}</option>)}
         </select>
-        <button className="withicon" title="Toggle sort direction" onClick={() => setDesc(!desc)}><Icon name={desc ? 'arrowDown' : 'arrowUp'} />{desc ? 'High to low' : 'Low to high'}</button>
+        <button className="withicon" title="Toggle sort direction" onClick={() => setDesc(!desc)}><Icon name={desc ? 'arrowDown' : 'arrowUp'} />{SORTS[sort][2][desc ? 0 : 1]}</button>
         <div className="seg">
           {['tile', 'grid', 'list'].map((v) => (
             <button key={v} className={view === v ? 'active' : ''} onClick={() => setView(v)}>{v}</button>
           ))}
         </div>
-        <button onClick={() => load(true)} disabled={loading}>{loading ? 'Loading…' : 'Refresh'}</button>
+        <button className={`withicon filtersbtn ${chips.length ? 'on' : ''}`} aria-expanded={panel} onClick={() => setPanel(!panel)}><Icon name="filter" size={15} />Filters{chips.length ? ` (${chips.length})` : ''}</button>
+        <button className={`refreshbtn ${loading ? 'spin' : ''}`} onClick={() => load(true)} disabled={loading} title={loading ? 'Loading…' : 'Refresh the library'} aria-label="Refresh the library"><Icon name="refresh" size={17} /></button>
       </div>
 
-      <div className="toolbar filters">
-        <MultiSelect label="Type" options={[['movie', 'Movies'], ['show', 'Shows']]} value={types} onChange={setTypes} />
-        <MultiSelect label="Status" options={STATUS} value={statuses} onChange={setStatuses} />
-        <MultiSelect label="Instance" options={opts.inst} value={instances} onChange={setInstances} />
-        <MultiSelect label="Drive / root folder" options={opts.root} value={roots} onChange={setRoots} />
-        <MultiSelect label="Genre" options={opts.genre} value={genres} onChange={setGenres} />
-        <MultiSelect label="Tag" options={opts.tag} value={tagSel} onChange={setTagSel} />
-        {hasOverseerr && <MultiSelect label="Keywords" searchable options={kwOpts} value={kwSel} onChange={setKwSel} empty="No keywords yet. Settings > Library sync loads them from Overseerr." />}
-        {hasWatch && <>
-          <MultiSelect label="Watched" options={WATCH} value={watches} onChange={setWatches} />
-          <span className="range">Not watched in <input type="number" min="1" placeholder="days" value={staleDays} onChange={(e) => setStaleDays(e.target.value)} /> days</span>
-        </>}
-        <span className="range">
-          Size <input type="number" min="0" placeholder="min" value={minGB} onChange={(e) => setMinGB(e.target.value)} />
-          to <input type="number" min="0" placeholder="max" value={maxGB} onChange={(e) => setMaxGB(e.target.value)} /> GB
-        </span>
-        {(filtered || q) && <button className="link" onClick={() => { clearFilters(); setQ(''); }}>Clear all</button>}
-      </div>
+      {(chips.length > 0 || q) && (
+        <div className="chiprow">
+          {chips.map((c) => (
+            <span key={c.id} className="fchip">
+              <button className="fchiptext" onClick={() => setPanel(true)} title="Change this filter"><b>{c.label}:</b> {c.text}</button>
+              <button className="fchipx" onClick={c.clear} aria-label={`Remove the ${c.label} filter`}><Icon name="x" size={12} /></button>
+            </span>
+          ))}
+          <button className="link" onClick={() => { clearFilters(); setQ(''); }}>Clear all</button>
+        </div>
+      )}
 
       {err && <div className="notice bad">{err}</div>}
       {data.errors.map((e) => <div key={e} className="notice bad">{e}</div>)}
@@ -213,7 +259,7 @@ export default function Library({ goSettings }) {
 
       {view === 'list' ? (
         <table className="list">
-          <thead><tr><th /><th /><th>Title</th><th>Type</th><th>Managed by</th><th>Size</th>{hasWatch && <th>Watched</th>}<th>Status</th><th /></tr></thead>
+          <thead><tr><th /><th /><th>Title</th><th>Type</th><th>Managed by</th><th>Size</th><th>Rating</th>{hasWatch && <th>Watched</th>}<th>Status</th><th /></tr></thead>
           <tbody>
             {paged.map((it, i) => { const idx = start + i;
               const p = props(it, idx);
@@ -225,9 +271,10 @@ export default function Library({ goSettings }) {
                   <td>{it.type === 'movie' ? 'Movie' : 'Series'}</td>
                   <td>{it.instances.map((i) => i.serviceName).join(', ')}</td>
                   <td>{fmtBytes(it.size)}</td>
+                  <td>{it.rating ? it.rating.toFixed(1) : ''}</td>
                   {hasWatch && <td>{watchLabel(it.watch)}</td>}
                   <td>{it.hasFile ? (it.monitored ? 'On disk' : 'On disk, unmonitored') : it.monitored ? 'Missing' : 'No file, unmonitored'}</td>
-                  <td><button className="icon" title="Delete" onClick={p.onDelete}><Trash /></button></td>
+                  <td className="rowbtns"><button className="icon" title="More actions" onClick={p.onMenu}><Icon name="more" size={16} strokeWidth={3} /></button><button className="icon" title="Delete" onClick={p.onDelete}><Trash /></button></td>
                 </tr>
               );
             })}
@@ -245,10 +292,11 @@ export default function Library({ goSettings }) {
                   <span className="kind">{it.type === 'movie' ? 'Movie' : 'Series'}</span>
                   <span className="size">{fmtBytes(it.size)}</span>
                   {!it.hasFile && <span className="nofile">No file</span>}
+                  <button className="icon kebab" title="More actions" onClick={p.onMenu}><Icon name="more" size={16} strokeWidth={3} /></button>
                   <button className="icon trash" title="Delete" onClick={p.onDelete}><Trash /></button>
                 </div>
                 <div className="meta">
-                  <b>{it.title}</b><small>{it.year} · {fmtBytes(it.size)}</small>
+                  <b>{it.title}</b><small>{it.year} · {fmtBytes(it.size)}{sort === 'rating' && it.rating ? ` · ★ ${it.rating.toFixed(1)}` : ''}</small>
                   {hasWatch && <small>{watchLabel(it.watch)}</small>}
                   <Tags item={it} />
                 </div>
@@ -275,12 +323,34 @@ export default function Library({ goSettings }) {
           item={data.items.find((i) => i.key === detail)}
           hasWatch={hasWatch}
           hasPlex={data.serviceTypes.includes('plex')}
+          hasOverseerr={hasOverseerr}
+          onOpen={(k) => setDetail(k)}
           onKeyword={(k) => { setKwSel(new Set([k])); setDetail(null); window.scrollTo({ top: 0 }); }}
           onClose={() => setDetail(null)}
           onDelete={() => { setDetail(null); setDialog([detail]); }}
           onChanged={() => load(true)}
         />
       )}
+
+      {panel && (
+        <FilterPanel
+          defs={defs} shown={shown.length} total={data.items.length} canClear={chips.length > 0}
+          stale={hasWatch ? { value: staleDays, set: setStaleDays } : null}
+          size={{ min: minGB, max: maxGB, setMin: setMinGB, setMax: setMaxGB }}
+          onClear={clearFilters} onClose={() => setPanel(false)}
+        />
+      )}
+      {menu && (
+        <ItemMenu
+          item={menu.item} rect={menu.rect} hasPlex={data.serviceTypes.includes('plex')}
+          cached={plex.map[menu.item.key]} onChanged={loadPlex}
+          onClose={() => setMenu(null)}
+          onDetails={() => setDetail(menu.item.key)}
+          onDelete={() => setDialog([menu.item.key])}
+          onList={(kind) => { setPlexList({ kind, item: menu.item }); setMenu(null); }}
+        />
+      )}
+      {plexList && <PlexListDialog kind={plexList.kind} item={plexList.item} onChanged={loadPlex} onClose={() => setPlexList(null)} />}
 
       {dialog && (
         <DeleteDialog

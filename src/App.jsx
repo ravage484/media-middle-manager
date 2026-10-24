@@ -6,6 +6,7 @@ import Login from './Login.jsx';
 import Logo from './Logo.jsx';
 import { api } from './api.js';
 import { applyAppearance, loadAppearance } from './themes.js';
+import { VERSION } from './version.js';
 
 const Icon = ({ children }) => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>
@@ -71,6 +72,7 @@ function Shell({ auth, onSignOut }) {
         <button className="collapse" onClick={() => setCollapsed(!collapsed)} title={collapsed ? 'Expand menu' : 'Collapse menu'} aria-label={collapsed ? 'Expand menu' : 'Collapse menu'} aria-expanded={!collapsed}>
           <Icon><path d={collapsed ? 'M9 6l6 6-6 6' : 'M15 6l-6 6 6 6'} /></Icon><span className="label">Collapse</span>
         </button>
+        <button className="ver" onClick={() => setTab('settings')} title={`Media Middle Manager ${VERSION}. Click for details.`}>v{VERSION}</button>
       </aside>
       <main>
         {/* Library stays mounted so search/selection survive tab switches */}

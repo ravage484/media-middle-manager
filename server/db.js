@@ -73,6 +73,15 @@ const MIGRATIONS = [
     value TEXT NOT NULL
   );
   `,
+  // v4: what Plex says about each library title (found, watched, collections, playlists), kept so the library can filter by it
+  // and the title menu opens instantly.
+  `
+  CREATE TABLE plex_meta (
+    key        TEXT PRIMARY KEY,
+    data       TEXT NOT NULL,
+    fetched_at TEXT NOT NULL
+  );
+  `,
 ];
 
 for (let v = db.pragma('user_version', { simple: true }); v < MIGRATIONS.length; v++) {
@@ -151,6 +160,23 @@ export const getKeywordMap = () => {
 export const cachedKeywordKeys = () => new Set(db.prepare('SELECT key FROM title_meta').all().map((r) => r.key));
 export const setKeywords = (key, list) =>
   db.prepare('INSERT OR REPLACE INTO title_meta (key, keywords, fetched_at) VALUES (?, ?, ?)').run(key, JSON.stringify(list), new Date().toISOString());
+
+/* ---------- Plex cache (one JSON entry per library title) ---------- */
+export const getPlexMap = () => {
+  const out = {};
+  for (const r of db.prepare('SELECT key, data FROM plex_meta').all()) { try { out[r.key] = JSON.parse(r.data); } catch { /* skip a damaged row */ } }
+  return out;
+};
+export const plexMetaKeys = () => new Set(db.prepare('SELECT key FROM plex_meta').all().map((r) => r.key));
+export const setPlexMeta = (key, entry) =>
+  db.prepare('INSERT OR REPLACE INTO plex_meta (key, data, fetched_at) VALUES (?, ?, ?)').run(key, JSON.stringify(entry), new Date().toISOString());
+// A full sync replaces everything, which also drops titles that have left the library.
+export const replacePlexMeta = db.transaction((entries) => {
+  db.exec('DELETE FROM plex_meta');
+  const ins = db.prepare('INSERT INTO plex_meta (key, data, fetched_at) VALUES (?, ?, ?)');
+  const at = new Date().toISOString();
+  for (const [key, entry] of Object.entries(entries)) ins.run(key, JSON.stringify(entry), at);
+});
 
 /* ---------- app settings (JSON values by key) ---------- */
 export const getSetting = (key, fallback) => {

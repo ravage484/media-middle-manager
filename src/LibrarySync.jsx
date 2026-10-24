@@ -5,6 +5,7 @@ import Icon from './Icon.jsx';
 const SCHEDULES = [['off', 'Never'], ['daily', 'Every day'], ['weekly', 'Every week'], ['monthly', 'Every month']];
 const when = (iso) => (iso ? new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : null);
 const WHY = { manual: 'started by you', new: 'new titles were found', webhook: 'Radarr/Sonarr reported a change', schedule: 'scheduled refresh' };
+const WHY_PLEX = { ...WHY, webhook: 'Plex reported a change' };
 const CHECKS = [[5, 'every 5 minutes'], [15, 'every 15 minutes'], [60, 'every hour']];
 
 // Keeps the keywords from Overseerr up to date: by hand, when new titles appear, and on a schedule. The server does the work,
@@ -12,7 +13,11 @@ const CHECKS = [[5, 'every 5 minutes'], [15, 'every 15 minutes'], [60, 'every ho
 export default function LibrarySync() {
   const [st, setSt] = useState(null);
   const [err, setErr] = useState('');
-  const refresh = () => api.keywords().then((d) => setSt(d.status)).catch((e) => setErr(e.message));
+  const [px, setPx] = useState(null); // the cached Plex data's status
+  const refresh = () => {
+    api.keywords().then((d) => setSt(d.status)).catch((e) => setErr(e.message));
+    api.plexCache().then((d) => setPx(d.status)).catch(() => {});
+  };
   useEffect(() => {
     refresh();
     const t = setInterval(refresh, 2500);
@@ -24,6 +29,8 @@ export default function LibrarySync() {
   const { auto } = st;
   const hookUrl = st.hook?.token ? `${window.location.origin}/api/hooks/library?token=${st.hook.token}` : '';
   const setAuto = (patch) => run(() => api.keywordAuto(patch));
+  const plexHookUrl = st.hook?.token ? `${window.location.origin}/api/hooks/plex?token=${st.hook.token}` : '';
+  const runPx = (fn) => fn().then((x) => { setPx(x); setErr(''); }).catch((e) => setErr(e.message));
 
   return (
     <div className="sgroup">
@@ -82,6 +89,59 @@ export default function LibrarySync() {
           </p>
           <button onClick={() => { if (confirm('Make a new token? The old address stops working, so Radarr and Sonarr need the new one.')) run(api.keywordNewToken); }}>New token…</button>
         </div>
+      )}
+
+      {px?.configured && (
+        <>
+          <h3 style={{ marginTop: 28 }}>Plex data</h3>
+          <p className="dim">
+            Which collections and playlists each title is in, and whether it is watched, are remembered from Plex. That lets the library
+            filter by them and makes a title's menu open instantly. They are refreshed by the same checks and schedule as above.
+          </p>
+          <div className="syncbox">
+            {px.running ? (
+              <p>Reading Plex… ({WHY_PLEX[px.trigger] || px.trigger})</p>
+            ) : (
+              <>
+                <p>
+                  {px.cached ? `${px.inPlex} of ${px.cached} titles are in Plex.` : 'Nothing loaded from Plex yet.'}
+                  {px.finishedAt && <><br /><span className="lastrun">Last read {when(px.finishedAt)} ({WHY_PLEX[px.trigger] || px.trigger}).</span></>}
+                </p>
+                {px.lastError && <p className="dim">The last read failed: {px.lastError}. The earlier data is kept.</p>}
+                <button className="primary" onClick={() => runPx(api.plexSync)}>Update Plex data now</button>
+              </>
+            )}
+          </div>
+
+          <h3 style={{ marginTop: 28 }}>Instant updates from Plex (webhook)</h3>
+          <p className="dim">
+            Plex can tell this app when something is added to a library, finished or rated, and the data above is refreshed within about
+            half a minute. This needs <b>Plex Pass</b>.{' '}
+            {px.plexPass === true && <span className="ok">Plex Pass detected on this server.</span>}
+            {px.plexPass === false && <span className="warn">This server's account does not have Plex Pass, so Plex will not send webhooks.</span>}
+            {px.plexPass === null && <span>Could not tell whether this account has Plex Pass.</span>}
+          </p>
+          <div className="form narrow">
+            <label className="check">
+              <input type="checkbox" checked={auto.plexWebhook} disabled={px.plexPass !== true && !auto.plexWebhook} onChange={(e) => setAuto({ plexWebhook: e.target.checked })} />
+              Accept updates from Plex
+            </label>
+          </div>
+          {auto.plexWebhook && plexHookUrl && (
+            <div className="syncbox">
+              <p>On <b>app.plex.tv</b> open <b>Settings &gt; Webhooks &gt; Add Webhook</b> and enter this address:</p>
+              <ul className="steps">
+                <li><code className="url">{plexHookUrl}</code> <button onClick={() => navigator.clipboard?.writeText(plexHookUrl)}>Copy</button></li>
+              </ul>
+              <p className="dim">
+                It uses the same token as the Radarr/Sonarr webhook above (the <b>New token…</b> button changes both). Plex sends every
+                event to one address; only added, finished and rated are used, and playing and pausing are ignored. Plex does not announce
+                edits to collections or playlists made inside Plex, so those show up at the next scheduled read or when you open the title.
+                {px.hookLastReceived ? ` Last call received ${when(px.hookLastReceived)}.` : ' Nothing received yet.'}
+              </p>
+            </div>
+          )}
+        </>
       )}
 
       <h3 style={{ marginTop: 28 }}>Run it now</h3>

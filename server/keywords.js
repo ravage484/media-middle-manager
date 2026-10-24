@@ -33,22 +33,36 @@ function names(list, maxItems, maxLen) {
 
 export const overseerrService = () => getServices().find((s) => s.type === 'overseerr');
 
-export async function fetchOverseerrMeta(item, svc = overseerrService()) {
+// withRatings: also ask for the scores a title's window shows (TMDB, and Rotten Tomatoes for shows). The background sync does not.
+export async function fetchOverseerrMeta(item, svc = overseerrService(), { withRatings = false } = {}) {
   if (!svc || !TMDB_RE.test(String(item.tmdbId))) return null;
-  const d = await api(svc, `/api/v1/${item.type === 'movie' ? 'movie' : 'tv'}/${item.tmdbId}`);
+  const kind = item.type === 'movie' ? 'movie' : 'tv';
+  const [d, rt] = await Promise.all([
+    api(svc, `/api/v1/${kind}/${item.tmdbId}`),
+    withRatings && kind === 'tv' ? api(svc, `/api/v1/tv/${item.tmdbId}/ratings`).catch(() => null) : null, // Rotten Tomatoes; optional
+  ]);
   const where = Array.isArray(d.watchProviders) ? d.watchProviders.find((p) => p.iso_3166_1 === REGION) : null;
-  return {
+  const out = {
     keywords: names(d.keywords, 100, 60),
     countries: names(d.productionCountries, 20, 60),
     providers: names(where?.flatrate, 12, 40),
   };
+  if (withRatings) {
+    const ratings = [];
+    const vote = typeof d.voteAverage === 'number' && Number.isFinite(d.voteAverage) ? d.voteAverage : 0;
+    if (vote > 0 && vote <= 10) ratings.push({ source: 'TMDB', display: `${Math.round(vote * 10)}%`, votes: Number.isInteger(d.voteCount) && d.voteCount >= 0 ? d.voteCount : null });
+    const critics = rt?.criticsScore;
+    if (Number.isInteger(critics) && critics >= 0 && critics <= 100) ratings.push({ source: 'Rotten Tomatoes', display: `${critics}%`, votes: null });
+    out.ratings = ratings;
+  }
+  return out;
 }
 
 /* ---------- how the cache is kept up to date ---------- */
 const DAY = 86400000;
 const PERIOD = { daily: DAY, weekly: 7 * DAY, monthly: 30 * DAY };
 const known = (v) => v === 'off' || (typeof v === 'string' && Object.hasOwn(PERIOD, v)); // not PERIOD[v]: '__proto__' and 'toString' are truthy there
-const DEFAULT_AUTO = { onNewTitles: true, schedule: 'weekly', webhook: false, checkMinutes: 15 };
+const DEFAULT_AUTO = { onNewTitles: true, schedule: 'weekly', webhook: false, plexWebhook: false, checkMinutes: 15 };
 const CHECK_CHOICES = [5, 15, 60];
 
 export function getAuto() {
@@ -57,6 +71,7 @@ export function getAuto() {
     onNewTitles: typeof s.onNewTitles === 'boolean' ? s.onNewTitles : DEFAULT_AUTO.onNewTitles,
     schedule: known(s.schedule) ? s.schedule : DEFAULT_AUTO.schedule,
     webhook: typeof s.webhook === 'boolean' ? s.webhook : DEFAULT_AUTO.webhook,
+    plexWebhook: typeof s.plexWebhook === 'boolean' ? s.plexWebhook : DEFAULT_AUTO.plexWebhook,
     checkMinutes: CHECK_CHOICES.includes(s.checkMinutes) ? s.checkMinutes : DEFAULT_AUTO.checkMinutes,
   };
 }
@@ -79,13 +94,17 @@ export function setAuto(o) {
     if (typeof o.webhook !== 'boolean') throw userError('The webhook must be on or off');
     next.webhook = o.webhook;
   }
+  if (has('plexWebhook')) {
+    if (typeof o.plexWebhook !== 'boolean') throw userError('The Plex webhook must be on or off');
+    next.plexWebhook = o.plexWebhook;
+  }
   if (has('checkMinutes')) {
     if (!CHECK_CHOICES.includes(o.checkMinutes)) throw userError('Check every 5, 15 or 60 minutes');
     next.checkMinutes = o.checkMinutes;
   }
   if (!any) throw userError('Expected the update settings');
   setSetting('keywords.auto', next);
-  if (next.webhook) hookToken(); // make sure there is a token to show
+  if (next.webhook || next.plexWebhook) hookToken(); // make sure there is a token to show
   return next;
 }
 
@@ -108,9 +127,8 @@ const basicPassword = (h) => {
   return d.slice(d.indexOf(':') + 1);
 };
 
-// Returns the HTTP status to answer with: 200 accepted, 401 wrong token, 404 webhook is off, 429 too many wrong tokens.
-export function acceptHook(req) {
-  if (!getAuto().webhook) return 404;
+// Checks the token and throttles guessing. Returns the HTTP status to answer with: 200 fine, 401 wrong token, 429 too many wrong tokens.
+export function authHook(req) {
   const now = Date.now();
   const f = fails.get(req.ip);
   if (f && now - f.since < 60000 && f.n >= 10) return 429;
@@ -122,6 +140,14 @@ export function acceptHook(req) {
     return 401;
   }
   fails.delete(req.ip);
+  return 200;
+}
+
+// Radarr/Sonarr webhook. 200 accepted, 401 wrong token, 404 webhook is off, 429 too many wrong tokens.
+export function acceptHook(req) {
+  if (!getAuto().webhook) return 404;
+  const code = authHook(req);
+  if (code !== 200) return code;
   lastHook = new Date().toISOString();
   let tries = 0;
   const run = async () => {
@@ -133,6 +159,8 @@ export function acceptHook(req) {
   hookTimer = setTimeout(run, HOOK_DELAY);
   return 200;
 }
+
+export const schedulePeriod = (auto) => (known(auto.schedule) && auto.schedule !== 'off' ? PERIOD[auto.schedule] : null);
 
 /* ---------- background sync ---------- */
 // What went wrong, in words for a person rather than the raw request and response.
@@ -149,7 +177,7 @@ export function syncStatus() {
   const auto = getAuto();
   const lastFull = getSetting('keywords.lastFull', null); // when a full refresh last started (manual "refresh all" or scheduled)
   const due = auto.schedule !== 'off' && lastFull ? new Date(Date.parse(lastFull) + PERIOD[auto.schedule]).toISOString() : null;
-  return { ...job, cached: cachedKeywordKeys().size, auto, lastFull, nextFull: due, hook: { token: auto.webhook ? hookToken() : null, lastReceived: lastHook } };
+  return { ...job, cached: cachedKeywordKeys().size, auto, lastFull, nextFull: due, hook: { token: auto.webhook || auto.plexWebhook ? hookToken() : null, lastReceived: lastHook } };
 }
 
 // trigger: 'manual' (a button), 'new' (found by checking), 'webhook' (Radarr/Sonarr said so) or 'schedule'. Automatic runs with nothing to do stay silent.
@@ -189,7 +217,7 @@ export const keywordsPayload = () => ({ map: getKeywordMap(), status: syncStatus
 /* ---------- the scheduler ---------- */
 // Checked once a minute; the intervals below are what is actually waited. Overridable only so the tests do not have to wait.
 const TICK = Number(process.env.MMM_SCHEDULER_MS) || 60000;
-const newEvery = () => Number(process.env.MMM_NEW_CHECK_MS) || getAuto().checkMinutes * 60000;
+export const newEvery = () => Number(process.env.MMM_NEW_CHECK_MS) || getAuto().checkMinutes * 60000;
 let lastNewCheck = 0;
 
 export async function tick() {

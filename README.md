@@ -27,9 +27,20 @@ It started with the part that is hardest to do by hand, **keeping the library ti
 - Poster library built from every Radarr and Sonarr instance you connect (1080p and 4K servers are merged into one title).
 - Tile, grid and list views, with paging (250 titles per page by default).
 - Search, plus multi-select filters for type, status, instance, drive/root folder, genre and **tags** from Radarr and Sonarr.
-- Sort by total size, size per episode, episode count, title, date added, year, last watched or play count. Find what is eating your disks.
+- Sort by total size, size per episode, episode count, title, date added, year, **rating**, last watched or play count. Rating is one score per title from Radarr/Sonarr (a movie's IMDb or TMDB score, whichever has more votes; a show's Sonarr score), weighted by vote count so one perfect vote does not top the list, shown in the list view's Rating column and on tiles while sorted by it. Find what is eating your disks.
 - Size range filter and a running total for whatever the filters match.
-- Click a title for a details window styled like a request page: a backdrop header with an availability badge, the overview and tags, **ratings** (IMDb, TMDB, Rotten Tomatoes and Metacritic for movies, the combined score for shows), status, release or air dates, runtime, language, network or studio, external links, and each instance's folder. For a show, every season is listed as an expandable bar with its episode count and whether it is available, partially available or missing.
+- Click a title for a details window styled like a request page: a backdrop header with an availability badge, the overview and tags, **ratings** (IMDb, TMDB, Rotten Tomatoes and Metacritic for movies from Radarr; TMDB and Rotten Tomatoes for shows from Overseerr, or Sonarr's single unnamed score when Overseerr is not set up), shown with their logos, status, release or air dates, runtime, language, network or studio, external links, and each instance's folder. For a show, every season is listed as an expandable bar with its episode count and whether it is available, partially available or missing.
+
+**Recommendations** (optional, needs Overseerr)
+- At the bottom of a title's window, a row of **Recommendations** and **Similar** titles from Overseerr (TMDB), like its own title pages. Each card shows its poster, rating and whether you already have it (*In library*, *Available*, *Partial*, *Requested*). A card for something you own opens it here; any other opens its TMDB page. *Show more* loads further pages.
+
+**Plex actions from each title** (optional)
+- Hover a poster (or use the last column in the list view) and click the **...** button for a menu like Plex's own, without anything that plays: **Add to collection...**, **Add to playlist...**, **Mark as watched / unwatched**, **Refresh metadata** and **Analyze**, plus **Details** and **Delete...**.
+- The collection and playlist windows list what exists, with the title's current ones ticked. Tick to add, untick to remove, or create a new one with the title already in it. Smart collections and playlists are not offered, because Plex fills them itself.
+- A title is found in Plex by its TMDB or TVDB id (or title and year). If it is in more than one Plex library, such as Movies and a second movie library, watched state, refresh and analyze are applied to each, and collections are chosen per library.
+- Watched state and playlists belong to the account the Plex token is for (the server owner, normally).
+- What Plex says about each title (in Plex or not, watched, its collections and playlists) is cached in the database, so the **Collections** and **Playlists** filters work in the library and the menu opens instantly; opening a title also re-checks that one title with Plex. The cache is read by **Settings > Library sync > Plex data**, on the same checks and schedule as the keywords, or by hand.
+- **Plex webhook (needs Plex Pass):** the app detects whether the Plex account has Plex Pass and only offers the setting when it does. Add the address shown in Settings under *app.plex.tv > Settings > Webhooks*; added, finished and rated events refresh the cache within about half a minute. Plex does not announce collection or playlist edits made inside Plex, so those appear at the next read or when you open the title.
 
 **Keywords from Overseerr** (optional)
 - Overseerr shows TMDB keywords on every title page (*detective*, *island*, *heist*...). With Overseerr connected, the library gets a searchable **Keywords** filter built from them, so you can organize your media by theme.
@@ -316,7 +327,7 @@ No. Plex only reports plays for the account that owns the token. Use Tautulli fo
 
 ## Credits and trademarks
 
-Service logos shown in the Settings page belong to their respective owners (Radarr, Sonarr, Prowlarr, Overseerr, qBittorrent, Plex, Tautulli) and are used only to identify those services. This project is not affiliated with or endorsed by any of them.
+Service logos shown in the Settings page belong to their respective owners (Radarr, Sonarr, Prowlarr, Overseerr, qBittorrent, Plex, Tautulli), and so do the rating marks shown in a title's window (IMDb, TMDB, Rotten Tomatoes, Metacritic; the artwork comes from the CC0 [Simple Icons](https://simpleicons.org) set) and are used only to identify those services. This project is not affiliated with or endorsed by any of them.
 
 ## License
 

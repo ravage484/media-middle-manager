@@ -1,13 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, fmtBytes, watchLabel } from './api.js';
 import Poster from './Poster.jsx';
 import EpisodePicker from './EpisodePicker.jsx';
 import EpisodeDeleteDialog from './EpisodeDeleteDialog.jsx';
 import Icon from './Icon.jsx';
+import Recommendations from './Recommendations.jsx';
 
 // Dates from the server are "2011-10-25" (no time zone); added dates are full timestamps.
 const day = (s) => (s ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? `${s}T12:00:00` : s).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : null);
 const mins = (m) => (m ? (m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m} minutes`) : null);
+// A rating's source: its logo if public/logos/rating-<name>.svg exists, otherwise the name as text.
+const RATING_LOGO = { IMDb: 'imdb', TMDB: 'tmdb', 'Rotten Tomatoes': 'rottentomatoes', Metacritic: 'metacritic' };
+function RatingLabel({ source }) {
+  const [bad, setBad] = useState(false);
+  const f = RATING_LOGO[source];
+  if (!f || bad) return <small>{source}</small>;
+  return <img className="ratelogo" src={`/logos/rating-${f}.svg`} alt={source} onError={() => setBad(true)} />;
+}
 const Row = ({ k, children }) => (children ? <div className="irow"><dt>{k}</dt><dd>{children}</dd></div> : null);
 const TagIcon = () => (
   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -16,11 +25,13 @@ const TagIcon = () => (
 );
 
 // The window for one title: hero with the backdrop, overview and seasons on the left, an info card with ratings on the right.
-export default function Detail({ item, hasWatch, hasPlex, onClose, onDelete, onChanged, onKeyword }) {
+export default function Detail({ item, hasWatch, hasPlex, hasOverseerr, onClose, onDelete, onChanged, onKeyword, onOpen }) {
   const [d, setD] = useState(null); // backdrop, ratings, dates, links: fetched for this title when the window opens
   const [epDelete, setEpDelete] = useState(null); // selection being reviewed, if any
   const [refresh, setRefresh] = useState(0);
   const isShow = item.type === 'show';
+  const scroller = useRef(null);
+  useEffect(() => { scroller.current?.scrollTo({ top: 0 }); }, [item.key]); // opening a recommendation starts at the top
 
   useEffect(() => {
     setD(null);
@@ -69,7 +80,7 @@ export default function Detail({ item, hasWatch, hasPlex, onClose, onDelete, onC
           </div>
         </div>
 
-        <div className="dscroll">
+        <div className="dscroll" ref={scroller}>
           <div className="dcols">
             <div className="dleft">
               {item.overview && (<><h3>Overview</h3><p className="overview">{item.overview}</p></>)}
@@ -97,6 +108,7 @@ export default function Detail({ item, hasWatch, hasPlex, onClose, onDelete, onC
                   </ul>
                 </>
               )}
+              {hasOverseerr && <Recommendations item={item} onOpen={onOpen} />}
             </div>
 
             <aside className="dside">
@@ -104,7 +116,7 @@ export default function Detail({ item, hasWatch, hasPlex, onClose, onDelete, onC
                 {d?.ratings?.length > 0 && (
                   <div className="ratings">
                     {d.ratings.map((r) => (
-                      <span key={r.source} className="rate" title={r.votes ? `${r.votes.toLocaleString()} votes` : undefined}><b>{r.display}</b><small>{r.source}</small></span>
+                      <span key={r.source} className="rate" title={`${r.source}${r.votes ? `, ${r.votes.toLocaleString()} votes` : ''}`}><b>{r.display}</b><RatingLabel source={r.source} /></span>
                     ))}
                   </div>
                 )}

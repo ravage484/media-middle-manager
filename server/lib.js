@@ -165,6 +165,23 @@ export async function testService(svc) {
 /* ---------- library (aggregated from every Radarr + Sonarr) ---------- */
 let cache = { at: 0, items: [], errors: [] };
 
+// One number to sort the library by, 0 to 10, from what Radarr/Sonarr already list. For a movie it is IMDb's or TMDB's score,
+// whichever has more votes; for a show, Sonarr's score; with neither, Rotten Tomatoes or Metacritic scaled down. Scores are weighted
+// by their vote count (as IMDb's own top lists are): a thousand votes barely moves a score, while a perfect 10 from a single vote is
+// pulled toward the average, so it does not top the list. Anything that is not a sensible number is ignored.
+const PRIOR = 6.5, PRIOR_VOTES = 25;
+const valid = (v, scale = 1) => typeof v === 'number' && Number.isFinite(v) && v > 0 && v <= 10 * scale;
+const round1 = (v) => Math.round(v * 10) / 10;
+const weighted = (value, votes) => (valid(value) ? round1(((Number.isInteger(votes) && votes > 0 ? votes : 0) * value + PRIOR_VOTES * PRIOR) / ((Number.isInteger(votes) && votes > 0 ? votes : 0) + PRIOR_VOTES)) : null);
+function ratingOf(m, movie) {
+  const r = m.ratings;
+  if (!r || typeof r !== 'object') return null;
+  if (!movie) return valid(r.value) ? (Number.isInteger(r.votes) ? weighted(r.value, r.votes) : round1(r.value)) : null; // Sonarr does not always say how many votes
+  const best = [r.imdb, r.tmdb].filter((x) => valid(x?.value)).sort((a, b) => (b.votes || 0) - (a.votes || 0))[0];
+  if (best) return weighted(best.value, best.votes);
+  return valid(r.rottenTomatoes?.value, 10) ? round1(r.rottenTomatoes.value / 10) : valid(r.metacritic?.value, 10) ? round1(r.metacritic.value / 10) : null;
+}
+
 export async function getLibrary(force = false) {
   if (!force && Date.now() - cache.at < 60000) return cache;
   const svcs = getServices().filter((s) => s.type === 'radarr' || s.type === 'sonarr');
@@ -188,7 +205,7 @@ export async function getLibrary(force = false) {
         const it = map.get(key) || {
           key, type, title: m.title, year: m.year, tmdbId: m.tmdbId, tvdbId: m.tvdbId,
           poster: img?.remoteUrl || null, overview: m.overview, added: m.added,
-          size: 0, hasFile: false, monitored: false, instances: [], genres: m.genres || [], episodes: 0, tags: [],
+          size: 0, hasFile: false, monitored: false, instances: [], genres: m.genres || [], episodes: 0, tags: [], rating: null,
         };
         it.tags = [...new Set([...it.tags, ...tags])].sort();
         it.size += size;
@@ -196,6 +213,7 @@ export async function getLibrary(force = false) {
         it.hasFile ||= hasFile;
         it.monitored ||= !!m.monitored;
         it.poster ||= img?.remoteUrl || null;
+        it.rating ??= ratingOf(m, movie);
         it.instances.push({ serviceId: s.id, serviceName: s.name, arrId: m.id, monitored: !!m.monitored, size, hasFile, path: m.path,
           root: (m.rootFolderPath || (m.path || '').replace(/[\\/][^\\/]*$/, '')).replace(/[\\/]+$/, '') || '(unknown)' });
         map.set(key, it);
