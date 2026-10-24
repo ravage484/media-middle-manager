@@ -5,10 +5,10 @@ import ServiceIcon from './ServiceIcon.jsx';
 const INFO = { radarr: ['Radarr', 7878], sonarr: ['Sonarr', 8989], overseerr: ['Overseerr', 5055], qbittorrent: ['qBittorrent', 8080], prowlarr: ['Prowlarr', 9696], tautulli: ['Tautulli', 8181], plex: ['Plex', 32400] };
 // One section per service.
 const HINTS = {
-  radarr: 'Your movie libraries. Required for movies: they appear on the Library page, and deleting unmonitors them here and removes the files. Add one entry per instance, for example separate 1080p and 4K servers.',
-  sonarr: 'Your TV libraries. Required for shows: they appear on the Library page, and deleting unmonitors the series and its episodes here and removes the files. Add one entry per instance.',
-  overseerr: 'Deleting removes the title\'s requests and resets its media record, so it stops showing as available.',
-  qbittorrent: 'Deleting removes the title\'s torrents together with their data, so hardlinked or seeding copies don\'t keep using disk space.',
+  radarr: 'Your movie libraries. Required for movies: titles appear on the Library page with their ratings, files and tags, and clean-up unmonitors them here and removes the files. Add one entry per instance, for example separate 1080p and 4K servers.',
+  sonarr: 'Your TV libraries. Required for shows: titles appear on the Library page with their seasons, episodes and ratings, and clean-up unmonitors them here and removes the files. Add one entry per instance.',
+  overseerr: 'Requests. Used to clear a title\'s requests when it is removed, so it stops showing as available. Requesting new media will be added here.',
+  qbittorrent: 'Downloads. Used to remove a title\'s torrents together with their data during clean-up, so hardlinked or seeding copies don\'t keep using disk space.',
   prowlarr: 'Connection test only. The delete workflow never uses Prowlarr.',
   tautulli: 'Last watched and play counts across every Plex user. Preferred over Plex for watch history.',
   plex: 'Watch history for the token owner only, and an optional library rescan after a delete.',

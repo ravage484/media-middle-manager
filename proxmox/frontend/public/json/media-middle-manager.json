@@ -11,7 +11,7 @@
   "website": "https://github.com/ravage484/media-middle-manager",
   "logo": "https://raw.githubusercontent.com/ravage484/media-middle-manager/main/public/favicon.svg",
   "config_path": "/opt/media-middle-manager_data/mmm.db",
-  "description": "A dashboard that connects to Radarr, Sonarr, Overseerr and qBittorrent to remove media cleanly: it deletes the request, unmonitors the title (keeping Arr history), deletes the files and torrents, and logs what was done. Browse by poster, filter by size, tags and watch history (Tautulli or Plex), and multi-select to delete in bulk.",
+  "description": "One place to browse and manage your media stack. It connects to Radarr, Sonarr, Overseerr, qBittorrent, Tautulli and Plex and shows your library as posters, with ratings, files, tags, sizes and watch history for every title. Filter and sort by size, tags or what nobody watches, and clean up whole titles or single episodes so they stay removed (request, monitoring, files and torrents), with Radarr and Sonarr keeping the history. Requesting new media is planned.",
   "install_methods": [
     {
       "type": "default",

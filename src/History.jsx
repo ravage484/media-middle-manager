@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, fmtBytes } from './api.js';
+import { Mark } from './Icon.jsx';
 
 export default function History() {
   const [rows, setRows] = useState(null);
@@ -11,12 +12,12 @@ export default function History() {
       {rows.map((h) => (
         <details key={h.id}>
           <summary>
-            <span>{h.ok ? '✓' : '⚠'}</span>
-            <b>{h.title}</b> <small>{h.year} · {h.type === 'movie' ? 'Movie' : 'Series'}</small>
+            <Mark ok={h.ok} warn />
+            <b>{h.title}</b> <small>{h.year} · {h.type === 'movie' ? 'Movie' : h.type === 'episodes' ? 'Episodes' : 'Series'}</small>
             <span className="dim">{new Date(h.at).toLocaleString()} · freed {fmtBytes(h.freedBytes)}</span>
           </summary>
           <ul>
-            {h.steps.map((s, i) => <li key={i} className={s.ok ? '' : 'warn'}>{s.ok ? '✓' : '✗'} {s.label}{s.ok ? '' : ` — ${s.detail}`}</li>)}
+            {h.steps.map((s, i) => <li key={i} className={s.ok ? '' : 'warn'}><Mark ok={s.ok} /> {s.label}{s.ok ? '' : ` — ${s.detail}`}</li>)}
             {h.removedFiles.map((f, i) => <li key={'f' + i} className="path">{f.path}</li>)}
           </ul>
         </details>

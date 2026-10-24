@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { api } from './api.js';
 import Logo from './Logo.jsx';
 import { loadAppearance } from './themes.js';
+import { VERSION } from './version.js';
 
 // mode "setup": first run, create the account. mode "login": sign in.
 export default function Login({ mode, onDone }) {
@@ -29,7 +30,7 @@ export default function Login({ mode, onDone }) {
       <form className="logincard" onSubmit={submit}>
         <div className="loginbrand"><Logo style={a.logo} theme={a.theme} size={48} /><h1>Media Middle Manager</h1></div>
         <h2>{setup ? 'Create your account' : 'Sign in'}</h2>
-        {setup && <p className="dim">First run. This account protects everything that can delete media, so choose a strong password.</p>}
+        {setup && <p className="dim">First run. This account protects your whole media stack, including actions that remove files, so choose a strong password.</p>}
         <label>Username
           <input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoFocus required />
         </label>
@@ -45,6 +46,7 @@ export default function Login({ mode, onDone }) {
         {err && <div className="notice bad">{err}</div>}
         <button className="primary" disabled={busy}>{busy ? 'Please wait…' : setup ? 'Create account' : 'Sign in'}</button>
       </form>
+      <small className="loginver dim">Media Middle Manager v{VERSION}</small>
     </div>
   );
 }

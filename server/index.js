@@ -3,9 +3,16 @@ import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { getServices, saveServices, getHistory, getLibrary, plan, execute, testService, exportData, importData, resetLibraryCache, cleanService } from './lib.js';
+import { listEpisodes, planEpisodes, executeEpisodes } from './episodes.js';
+import { getDetails } from './details.js';
+import { plexAct, resetPlexIndex } from './plex.js';
+import { getRecommendations } from './recommendations.js';
+import { plexPayload, syncPlexData, refreshEntry, acceptPlexHook, plexTick } from './plexcache.js';
+import { keywordsPayload, startSync, stopSync, setAuto, syncStatus, tick, acceptHook, hookToken } from './keywords.js';
 import { snapshot, restoreFrom, DATA, securityInfo } from './db.js';
 import { authRoutes, requireAuth, sameOrigin, bootstrapAdmin, AUTH_DISABLED } from './auth.js';
 
+const { version: VERSION } = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 const MASK = '********';
 const app = express();
 app.disable('x-powered-by');
@@ -35,9 +42,20 @@ const bigJson = express.json({ limit: '20mb' }); // an import can carry a long h
 app.use((req, res, next) => (req.method === 'POST' && req.path === '/api/import' ? next() : smallJson(req, res, next)));
 app.use('/api', sameOrigin);
 authRoutes(app); // /api/auth/* handles its own access rules
+// Radarr/Sonarr "Connect > Webhook" calls this when something is added or imported. It has its own secret token instead of a session.
+app.post('/api/hooks/library', (req, res) => {
+  const code = acceptHook(req);
+  res.status(code).json(code === 200 ? { ok: true } : { error: { 401: 'Wrong token', 404: 'Not found', 429: 'Too many attempts' }[code] });
+});
+// Plex's own webhook (Plex Pass): multipart, so the body is read raw; only the event name inside it is used.
+app.post('/api/hooks/plex', express.raw({ type: () => true, limit: '2mb' }), (req, res) => {
+  const code = acceptPlexHook(req);
+  res.status(code).json(code === 200 ? { ok: true } : { error: { 401: 'Wrong token', 404: 'Not found', 429: 'Too many attempts' }[code] });
+});
 app.use('/api', requireAuth); // everything below needs a signed-in user
 
-const wrap = (fn) => (req, res) => Promise.resolve(fn(req, res)).catch((e) => res.status(500).json({ error: e.message }));
+// Errors marked userError (bad selection, show not found) are the caller's mistake: 400, not 500.
+const wrap = (fn) => (req, res) => Promise.resolve(fn(req, res)).catch((e) => res.status(e.userError ? 400 : 500).json({ error: e.message }));
 const bad = (res, msg) => res.status(400).json({ error: msg });
 const mask = (s) => ({ ...s, apiKey: s.apiKey ? MASK : '', password: s.password ? MASK : '' });
 // Replace masked secrets with the stored ones.
@@ -75,6 +93,7 @@ app.put('/api/services', wrap((req, res) => {
   try { list = req.body.map((s, i) => cleanService(unmask(asObject(s), old), i)); } catch (e) { return bad(res, e.message); }
   if (new Set(list.map((s) => s.id)).size !== list.length) return bad(res, 'Duplicate service ids');
   saveServices(list);
+  resetPlexIndex();
   res.json(getServices().map(mask));
 }));
 app.post('/api/services/test', wrap(async (req, res) => {
@@ -100,6 +119,72 @@ app.post('/api/delete', wrap(async (req, res) => {
 }));
 app.get('/api/history', (req, res) => res.json(getHistory()));
 
+// Per-episode delete (shows only). The key must be a show; the selection says which episodes in which Sonarr.
+const SHOW_KEY_RE = /^show:[A-Za-z0-9@._-]{1,120}$/;
+function cleanShowKey(k) { if (typeof k !== 'string' || !SHOW_KEY_RE.test(k)) throw new Error('Expected a show'); return k; }
+function cleanSelection(sel) {
+  if (!Array.isArray(sel) || !sel.length || sel.length > 20) throw new Error('Expected a selection of episodes');
+  return sel.map((s) => {
+    s = asObject(s);
+    const ids = s.episodeIds;
+    if (typeof s.serviceId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(s.serviceId)) throw new Error('Invalid service in the selection');
+    if (!Array.isArray(ids) || !ids.length || ids.length > 5000 || !ids.every((n) => Number.isInteger(n) && n > 0)) throw new Error('Invalid episode ids in the selection');
+    return { serviceId: s.serviceId, episodeIds: ids };
+  });
+}
+// Keywords from Overseerr (TMDB), cached so the library can filter by them. The sync runs in the background.
+app.get('/api/keywords', (req, res) => res.json(keywordsPayload()));
+app.post('/api/keywords/sync', wrap(async (req, res) => res.json(await startSync({ force: asObject(req.body).force === true }))));
+app.post('/api/keywords/stop', (req, res) => res.json(stopSync()));
+app.post('/api/keywords/webhook/token', (req, res) => { hookToken(true); res.json(syncStatus()); }); // a new token; the old one stops working
+app.put('/api/keywords/auto', wrap(async (req, res) => {
+  setAuto(req.body);
+  tick(); plexTick(); // switching something on takes effect now, not at the next minute
+  res.json(syncStatus());
+}));
+
+// Plex's "..." menu for a title: what it is in (collections, playlists, watched), and changing that.
+app.get('/api/plex/item', wrap(async (req, res) => {
+  let key; try { key = cleanKeys([req.query.key])[0]; } catch { return bad(res, 'Expected a title'); }
+  res.json((await refreshEntry(key)).info); // asks Plex, and keeps the cached entry for this title current
+}));
+app.get('/api/plex/cache', wrap(async (req, res) => res.json(await plexPayload())));
+app.post('/api/plex/sync', wrap(async (req, res) => res.json(await syncPlexData({ trigger: 'manual' }))));
+app.post('/api/plex/act', wrap(async (req, res) => {
+  const b = asObject(req.body);
+  let key; try { key = cleanKeys([b.key])[0]; } catch { return bad(res, 'Expected a title'); }
+  const result = await plexAct(key, b);
+  await refreshEntry(key).catch(() => {}); // the cache follows the change at once
+  res.json(result);
+}));
+
+// Recommendations / similar titles from Overseerr, for the bottom of a title's window.
+app.get('/api/recommendations', wrap(async (req, res) => {
+  let key; try { key = cleanKeys([req.query.key])[0]; } catch { return bad(res, 'Expected a title'); }
+  res.json(await getRecommendations(key, String(req.query.kind || 'recommendations'), Number(req.query.page || 1)));
+}));
+
+// Backdrop, ratings, dates and links for one title's window.
+app.get('/api/details', wrap(async (req, res) => {
+  let key; try { key = cleanKeys([req.query.key])[0]; } catch { return bad(res, 'Expected a title'); }
+  res.json(await getDetails(key));
+}));
+app.get('/api/episodes', wrap(async (req, res) => {
+  let key; try { key = cleanShowKey(req.query.key); } catch (e) { return bad(res, e.message); }
+  res.json(await listEpisodes(key));
+}));
+app.post('/api/episodes/plan', wrap(async (req, res) => {
+  let key, selection;
+  try { key = cleanShowKey(asObject(req.body).key); selection = cleanSelection(asObject(req.body).selection); } catch (e) { return bad(res, e.message); }
+  res.json(await planEpisodes(key, selection));
+}));
+app.post('/api/episodes/delete', wrap(async (req, res) => {
+  let key, selection;
+  try { key = cleanShowKey(asObject(req.body).key); selection = cleanSelection(asObject(req.body).selection); } catch (e) { return bad(res, e.message); }
+  const o = asObject(asObject(req.body).options);
+  res.json(await executeEpisodes(key, selection, { torrents: o.torrents === true, plex: o.plex === true })); // files are the point; nothing else is on by default
+}));
+
 app.get('/api/export', wrap((req, res) => {
   res.json(exportData({ secrets: req.query.secrets === '1', history: req.query.history !== '0' }));
 }));
@@ -109,6 +194,7 @@ app.post('/api/import', bigJson, wrap((req, res) => {
 }));
 
 app.get('/api/security', (req, res) => res.json(securityInfo()));
+app.get('/api/about', (req, res) => res.json({ version: VERSION, node: process.version }));
 
 // Whole-database backup. API keys inside it are encrypted, but the password hash is not, so keep it private.
 app.get('/api/backup/db', wrap((req, res) => {

@@ -22,7 +22,22 @@ export const api = {
   history: () => fetch('/api/history').then(j),
   exportData: (secrets, history) => fetch(`/api/export?secrets=${secrets ? 1 : 0}&history=${history ? 1 : 0}`).then(j),
   importData: (data, options) => send('POST', '/api/import', { data, options }),
+  about: () => fetch('/api/about').then(j),
   security: () => fetch('/api/security').then(j),
+  details: (key) => fetch(`/api/details?key=${encodeURIComponent(key)}`).then(j),
+  plexItem: (key) => fetch(`/api/plex/item?key=${encodeURIComponent(key)}`).then(j),
+  plexAct: (key, body) => send('POST', '/api/plex/act', { key, ...body }),
+  recommendations: (key, kind, page) => fetch(`/api/recommendations?key=${encodeURIComponent(key)}&kind=${kind}&page=${page}`).then(j),
+  plexCache: () => fetch('/api/plex/cache').then(j),
+  plexSync: () => send('POST', '/api/plex/sync', {}),
+  keywords: () => fetch('/api/keywords').then(j),
+  keywordSync: (force) => send('POST', '/api/keywords/sync', { force: !!force }),
+  keywordAuto: (auto) => send('PUT', '/api/keywords/auto', auto),
+  keywordNewToken: () => send('POST', '/api/keywords/webhook/token', {}),
+  keywordStop: () => send('POST', '/api/keywords/stop', {}),
+  episodes: (key) => fetch(`/api/episodes?key=${encodeURIComponent(key)}`).then(j),
+  episodePlan: (key, selection) => send('POST', '/api/episodes/plan', { key, selection }),
+  episodeDelete: (key, selection, options) => send('POST', '/api/episodes/delete', { key, selection, options }),
   // sourceKey (optional) travels base64-encoded in a header, never in the URL.
   restoreDb: (file, sourceKey) => {
     const headers = { 'Content-Type': 'application/octet-stream' };

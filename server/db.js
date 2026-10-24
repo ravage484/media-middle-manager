@@ -58,6 +58,30 @@ const MIGRATIONS = [
   );
   CREATE INDEX sessions_user ON sessions (user_id);
   `,
+  // v2: a cache of what Overseerr (TMDB) says about each title, so the library can be filtered by keyword without asking again.
+  `
+  CREATE TABLE title_meta (
+    key        TEXT PRIMARY KEY,
+    keywords   TEXT NOT NULL DEFAULT '[]',
+    fetched_at TEXT NOT NULL
+  );
+  `,
+  // v3: app-wide settings that are not tied to a service or a user (JSON values), such as how keywords are kept up to date.
+  `
+  CREATE TABLE settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+  `,
+  // v4: what Plex says about each library title (found, watched, collections, playlists), kept so the library can filter by it
+  // and the title menu opens instantly.
+  `
+  CREATE TABLE plex_meta (
+    key        TEXT PRIMARY KEY,
+    data       TEXT NOT NULL,
+    fetched_at TEXT NOT NULL
+  );
+  `,
 ];
 
 for (let v = db.pragma('user_version', { simple: true }); v < MIGRATIONS.length; v++) {
@@ -127,6 +151,41 @@ export const replaceHistory = db.transaction((list) => {
   list.forEach(insertEntry);
 });
 
+/* ---------- keyword cache (what Overseerr/TMDB says about each title) ---------- */
+export const getKeywordMap = () => {
+  const out = {};
+  for (const r of db.prepare('SELECT key, keywords FROM title_meta').all()) { try { out[r.key] = JSON.parse(r.keywords); } catch { out[r.key] = []; } }
+  return out;
+};
+export const cachedKeywordKeys = () => new Set(db.prepare('SELECT key FROM title_meta').all().map((r) => r.key));
+export const setKeywords = (key, list) =>
+  db.prepare('INSERT OR REPLACE INTO title_meta (key, keywords, fetched_at) VALUES (?, ?, ?)').run(key, JSON.stringify(list), new Date().toISOString());
+
+/* ---------- Plex cache (one JSON entry per library title) ---------- */
+export const getPlexMap = () => {
+  const out = {};
+  for (const r of db.prepare('SELECT key, data FROM plex_meta').all()) { try { out[r.key] = JSON.parse(r.data); } catch { /* skip a damaged row */ } }
+  return out;
+};
+export const plexMetaKeys = () => new Set(db.prepare('SELECT key FROM plex_meta').all().map((r) => r.key));
+export const setPlexMeta = (key, entry) =>
+  db.prepare('INSERT OR REPLACE INTO plex_meta (key, data, fetched_at) VALUES (?, ?, ?)').run(key, JSON.stringify(entry), new Date().toISOString());
+// A full sync replaces everything, which also drops titles that have left the library.
+export const replacePlexMeta = db.transaction((entries) => {
+  db.exec('DELETE FROM plex_meta');
+  const ins = db.prepare('INSERT INTO plex_meta (key, data, fetched_at) VALUES (?, ?, ?)');
+  const at = new Date().toISOString();
+  for (const [key, entry] of Object.entries(entries)) ins.run(key, JSON.stringify(entry), at);
+});
+
+/* ---------- app settings (JSON values by key) ---------- */
+export const getSetting = (key, fallback) => {
+  const r = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
+  if (!r) return fallback;
+  try { return JSON.parse(r.value); } catch { return fallback; }
+};
+export const setSetting = (key, value) => db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(key, JSON.stringify(value));
+
 /* ---------- whole-database backup and restore ---------- */
 // A consistent copy of the live database (taken in one read transaction, safe while the app runs).
 export const snapshot = () => db.serialize();
@@ -152,7 +211,9 @@ export function restoreFrom(file, sourceKey) {
     bk = new Database(file, { fileMustExist: true });
     if (bk.pragma('integrity_check', { simple: true }) !== 'ok') throw new Error('The backup file is damaged (integrity check failed)');
     const v = bk.pragma('user_version', { simple: true });
-    if (v !== MIGRATIONS.length) throw new Error(`The backup was made by a different version of the app (schema ${v}, this install uses ${MIGRATIONS.length})`);
+    // Older backups are fine: the tables that are restored (services, history, users) have not changed since schema 1,
+    // and anything added later is a cache that is rebuilt. A backup from a NEWER version is refused.
+    if (v < 1 || v > MIGRATIONS.length) throw new Error(`The backup was made by a different version of the app (schema ${v}, this install uses ${MIGRATIONS.length})`);
     const have = bk.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((r) => r.name);
     for (const t of TABLES) if (!have.includes(t)) throw new Error(`The backup is missing the "${t}" table`);
     const n = (t) => bk.prepare(`SELECT COUNT(*) AS c FROM ${t}`).get().c;

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, fmtBytes } from './api.js';
 import { getDeleteDefaults } from './prefs.js';
+import { Mark } from './Icon.jsx';
 
 export default function DeleteDialog({ keys, hasPlex, onClose }) {
   const [plans, setPlans] = useState(null);
@@ -78,10 +79,10 @@ export default function DeleteDialog({ keys, hasPlex, onClose }) {
           <div className="scroll">
             {results.map((r) => (
               <div className="plan" key={r.key}>
-                <div className="ptitle">{r.ok ? '✓' : '⚠'} {r.title}</div>
+                <div className="ptitle"><Mark ok={r.ok} warn /> {r.title}</div>
                 <ul>
                   {r.steps.map((s, i) => (
-                    <li key={i} className={s.ok ? '' : 'warn'}>{s.ok ? '✓' : '✗'} {s.label}{s.ok ? '' : ` — ${s.detail}`}</li>
+                    <li key={i} className={s.ok ? '' : 'warn'}><Mark ok={s.ok} /> {s.label}{s.ok ? '' : ` — ${s.detail}`}</li>
                   ))}
                 </ul>
               </div>
