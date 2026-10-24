@@ -80,6 +80,13 @@ function Shell({ auth, onSignOut }) {
         </button>
         <button className="ver" onClick={() => go('settings')} title={`Media Middle Manager ${VERSION}. Click for details.`}>v{VERSION}</button>
       </aside>
+      <nav className="tabbar" aria-label="Main">
+        {TABS.map(([id, label, icon]) => (
+          <button key={id} className={tab === id ? 'active' : ''} onClick={() => go(id)} aria-label={label} aria-current={tab === id ? 'page' : undefined}>
+            <Icon>{icon}</Icon><span>{label}</span>
+          </button>
+        ))}
+      </nav>
       <main>
         {/* Tabs stay mounted once opened, so search, selection and scroll survive switching */}
         <div hidden={tab !== 'library'}><Library goSettings={() => go('settings')} /></div>

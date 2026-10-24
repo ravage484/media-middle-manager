@@ -122,17 +122,17 @@ export default function Stale() {
 
       {view === 'stale' && rows.length > 0 && (
         <table className="list">
-          <thead><tr><th /><th /><th>Title</th><th>Type</th><th>Size</th><th>Last watched</th><th>Added</th><th /></tr></thead>
+          <thead><tr><th /><th /><th>Title</th><th className="hm">Type</th><th>Size</th><th>Last watched</th><th className="hm">Added</th><th /></tr></thead>
           <tbody>
             {shown.map((it) => (
               <tr key={it.key} className={selected.has(it.key) ? 'sel' : ''} onClick={() => setDetail(it.key)}>
                 <td onClick={(e) => { e.stopPropagation(); toggle(it.key); }}><input type="checkbox" readOnly checked={selected.has(it.key)} aria-label={`Select ${it.title}`} /></td>
                 <td className="thumb"><Poster item={it} /></td>
                 <td><b>{it.title}</b> <small>{it.year}</small></td>
-                <td>{it.type === 'movie' ? 'Movie' : 'Series'}</td>
-                <td>{fmtBytes(it.size)}</td>
+                <td className="hm">{it.type === 'movie' ? 'Movie' : 'Series'}</td>
+                <td className="nw">{fmtBytes(it.size)}</td>
                 <td>{it.watch.plays && it.watch.last ? <>{when(lastUse(it))} <small className="dim">{ago(lastUse(it))}</small></> : <span className="dim">Never</span>}</td>
-                <td>{when(Date.parse(it.added))} <small className="dim">{it.added ? ago(Date.parse(it.added)) : ''}</small></td>
+                <td className="hm">{when(Date.parse(it.added))} <small className="dim">{it.added ? ago(Date.parse(it.added)) : ''}</small></td>
                 <td className="rowbtns">
                   <button className="icon" title="Keep: leave this out of the list" onClick={(e) => { e.stopPropagation(); setKept([it.key], true); }}><Icon name="shield" size={16} /></button>
                   <button className="icon" title="Delete" onClick={(e) => { e.stopPropagation(); setDialog([it.key]); }}><Icon name="trash" size={16} /></button>
@@ -148,15 +148,15 @@ export default function Stale() {
           {keptRows.length === 0 && <div className="notice">Nothing is kept. Use the shield on a stale title, or <b>Keep</b> in its window, to leave it out of the list.</div>}
           {keptRows.length > 0 && (
             <table className="list">
-              <thead><tr><th /><th /><th>Title</th><th>Type</th><th>Size</th><th>Kept since</th><th /></tr></thead>
+              <thead><tr><th /><th /><th>Title</th><th className="hm">Type</th><th>Size</th><th>Kept since</th><th /></tr></thead>
               <tbody>
                 {shown.map((it) => (
                   <tr key={it.key} className={selected.has(it.key) ? 'sel' : ''} onClick={() => setDetail(it.key)}>
                     <td onClick={(e) => { e.stopPropagation(); toggle(it.key); }}><input type="checkbox" readOnly checked={selected.has(it.key)} aria-label={`Select ${it.title}`} /></td>
                     <td className="thumb"><Poster item={it} /></td>
                     <td><b>{it.title}</b> <small>{it.year}</small></td>
-                    <td>{it.type === 'movie' ? 'Movie' : 'Series'}</td>
-                    <td>{fmtBytes(it.size)}</td>
+                    <td className="hm">{it.type === 'movie' ? 'Movie' : 'Series'}</td>
+                    <td className="nw">{fmtBytes(it.size)}</td>
                     <td>{when(Date.parse(keep.map[it.key]))}</td>
                     <td className="rowbtns"><button className="withicon" title="Put it back in the Stale list when it qualifies" onClick={(e) => { e.stopPropagation(); setKept([it.key], false); }}><Icon name="x" size={14} />Stop keeping</button></td>
                   </tr>

@@ -70,6 +70,7 @@ It started with the part that is hardest to do by hand, **keeping the library ti
 - Per-step results afterwards, and a **History** tab recording every deletion and the space freed.
 
 **Make it yours**
+- **Works on a phone.** On a narrow screen the side menu becomes a tab bar along the bottom, windows fill the screen (the ... menu and the delete review slide up from the bottom), tables keep only their key columns, and the hover-only buttons on posters are always visible, since a touch screen cannot hover.
 - 12 color themes, 10 necktie logo styles, and 8 bundled fonts (no CDN, works offline).
 - Collapsible side navigation, and per-browser defaults for the delete window.
 

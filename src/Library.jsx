@@ -192,12 +192,12 @@ export default function Library({ goSettings }) {
   const go = (p) => { setPage(Math.max(0, Math.min(pages - 1, p))); window.scrollTo({ top: 0 }); };
   const pager = shown.length > 0 && (
     <div className="pager">
-      <button className="withicon" onClick={() => go(0)} disabled={start === 0}><Icon name="chevronsLeft" />First</button>
+      <button className="withicon hm" onClick={() => go(0)} disabled={start === 0}><Icon name="chevronsLeft" />First</button>
       <button className="withicon" onClick={() => go(page - 1)} disabled={start === 0}><Icon name="chevronLeft" />Prev</button>
       <span>{start + 1}–{start + paged.length} of {shown.length} · page {Math.min(page, pages - 1) + 1} of {pages}</span>
       <button className="withicon" onClick={() => go(page + 1)} disabled={page >= pages - 1}>Next<Icon name="chevronRight" /></button>
-      <button className="withicon" onClick={() => go(pages - 1)} disabled={page >= pages - 1}>Last<Icon name="chevronsRight" /></button>
-      <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} title="Titles per page">
+      <button className="withicon hm" onClick={() => go(pages - 1)} disabled={page >= pages - 1}>Last<Icon name="chevronsRight" /></button>
+      <select className="hm" value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} title="Titles per page">
         {[100, 250, 500, 1000].map((n) => <option key={n} value={n}>{n} per page</option>)}
       </select>
     </div>
@@ -264,7 +264,7 @@ export default function Library({ goSettings }) {
 
       {view === 'list' ? (
         <table className="list">
-          <thead><tr><th /><th /><th>Title</th><th>Type</th><th>Managed by</th><th>Size</th><th>Rating</th>{hasWatch && <th>Watched</th>}<th>Status</th><th /></tr></thead>
+          <thead><tr><th /><th /><th>Title</th><th className="hm">Type</th><th className="hm">Managed by</th><th>Size</th><th className="hm">Rating</th>{hasWatch && <th className="hm">Watched</th>}<th className="hm">Status</th><th /></tr></thead>
           <tbody>
             {paged.map((it, i) => { const idx = start + i;
               const p = props(it, idx);
@@ -273,12 +273,12 @@ export default function Library({ goSettings }) {
                   <td onClick={p.onCheck}><input type="checkbox" readOnly checked={p.selected} /></td>
                   <td className="thumb"><Poster item={it} /></td>
                   <td><b>{it.title}</b> <small>{it.year}</small> <Tags item={it} /></td>
-                  <td>{it.type === 'movie' ? 'Movie' : 'Series'}</td>
-                  <td>{it.instances.map((i) => i.serviceName).join(', ')}</td>
-                  <td>{fmtBytes(it.size)}</td>
-                  <td>{it.rating ? it.rating.toFixed(1) : ''}</td>
-                  {hasWatch && <td>{watchLabel(it.watch)}</td>}
-                  <td>{it.hasFile ? (it.monitored ? 'On disk' : 'On disk, unmonitored') : it.monitored ? 'Missing' : 'No file, unmonitored'}</td>
+                  <td className="hm">{it.type === 'movie' ? 'Movie' : 'Series'}</td>
+                  <td className="hm">{it.instances.map((i) => i.serviceName).join(', ')}</td>
+                  <td className="nw">{fmtBytes(it.size)}</td>
+                  <td className="hm">{it.rating ? it.rating.toFixed(1) : ''}</td>
+                  {hasWatch && <td className="hm">{watchLabel(it.watch)}</td>}
+                  <td className="hm">{it.hasFile ? (it.monitored ? 'On disk' : 'On disk, unmonitored') : it.monitored ? 'Missing' : 'No file, unmonitored'}</td>
                   <td className="rowbtns"><button className="icon" title="More actions" onClick={p.onMenu}><Icon name="more" size={16} strokeWidth={3} /></button><button className="icon" title="Delete" onClick={p.onDelete}><Trash /></button></td>
                 </tr>
               );
