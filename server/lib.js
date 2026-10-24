@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { getServices, saveServices, getHistory, addHistory, replaceHistory } from './db.js';
+import { keepForExport, keepFromImport } from './keep.js';
 
 export { getServices, saveServices, getHistory };
 export const resetLibraryCache = () => { cache.at = 0; }; // after services change underneath us (e.g. a restore)
@@ -16,7 +17,7 @@ export function exportData({ secrets = false, history = true } = {}) {
   }));
   return {
     app: 'media-middle-manager', version: 1, exportedAt: new Date().toISOString(), includesSecrets: !!secrets,
-    services, ...(history ? { history: getHistory() } : {}),
+    services, ...(history ? { history: getHistory() } : {}), keep: keepForExport(),
   };
 }
 
@@ -52,7 +53,7 @@ export function importData(data, { mode = 'merge', history = true } = {}) {
   const incoming = data.services.map(cleanService);
   const current = getServices();
   const result = mode === 'replace' ? [] : [...current];
-  const stats = { mode, added: 0, updated: 0, removed: mode === 'replace' ? current.length : 0, historyAdded: 0 };
+  const stats = { mode, added: 0, updated: 0, removed: mode === 'replace' ? current.length : 0, historyAdded: 0, keepAdded: 0 };
 
   for (const s of incoming) {
     const old = current.find((x) => x.type === s.type && normUrl(x.url) === normUrl(s.url));
@@ -78,6 +79,7 @@ export function importData(data, { mode = 'merge', history = true } = {}) {
     stats.historyAdded = extra.length;
     replaceHistory([...base, ...extra].sort((a, b) => b.at.localeCompare(a.at)));
   }
+  stats.keepAdded = keepFromImport(data.keep, mode); // the Keep list is small and is yours, so it always comes along
   cache.at = 0; // library depends on the services
   return stats;
 }

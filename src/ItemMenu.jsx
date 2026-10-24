@@ -1,12 +1,15 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api } from './api.js';
 import Icon from './Icon.jsx';
+import { useKeep } from './keep.js';
 
 // The "..." menu on a title, like Plex's own, without anything that plays. The Plex entries only appear when Plex is set up. What
 // they offer (watched or unwatched, whether it is in Plex at all) comes from the cache at once, and Plex is asked about this one
 // title in the background, so the menu corrects itself if something changed.
 export default function ItemMenu({ item, rect, hasPlex, cached, onClose, onDetails, onDelete, onList, onChanged }) {
   const ref = useRef(null);
+  const keep = useKeep();
+  const kept = keep.isKept(item.key);
   const [pos, setPos] = useState({ top: rect.bottom + 4, left: rect.left });
   const [info, setInfo] = useState(cached || (hasPlex ? undefined : null)); // undefined: nothing cached yet, so Plex is being asked
   const [err, setErr] = useState('');
@@ -54,6 +57,7 @@ export default function ItemMenu({ item, rect, hasPlex, cached, onClose, onDetai
   return (
     <div className="ctxmenu" ref={ref} style={{ top: pos.top, left: pos.left }} role="menu" onClick={(e) => e.stopPropagation()}>
       <Row icon="info" onClick={() => { onClose(); onDetails(); }}>Details</Row>
+      <Row icon="shield" onClick={() => { keep.set(item.key, !kept).catch(() => {}); onClose(); }}>{kept ? 'Stop keeping' : 'Keep (leave out of Stale)'}</Row>
       {hasPlex && (
         <>
           <div className="msep" />

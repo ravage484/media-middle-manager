@@ -5,6 +5,7 @@ import EpisodePicker from './EpisodePicker.jsx';
 import EpisodeDeleteDialog from './EpisodeDeleteDialog.jsx';
 import Icon from './Icon.jsx';
 import Recommendations from './Recommendations.jsx';
+import { useKeep } from './keep.js';
 
 // Dates from the server are "2011-10-25" (no time zone); added dates are full timestamps.
 const day = (s) => (s ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? `${s}T12:00:00` : s).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : null);
@@ -30,6 +31,10 @@ export default function Detail({ item, hasWatch, hasPlex, hasOverseerr, onClose,
   const [epDelete, setEpDelete] = useState(null); // selection being reviewed, if any
   const [refresh, setRefresh] = useState(0);
   const isShow = item.type === 'show';
+  const keep = useKeep();
+  const kept = keep.isKept(item.key);
+  const [keepBusy, setKeepBusy] = useState(false);
+  const toggleKeep = () => { setKeepBusy(true); keep.set(item.key, !kept).catch(() => {}).finally(() => setKeepBusy(false)); };
   const scroller = useRef(null);
   useEffect(() => { scroller.current?.scrollTo({ top: 0 }); }, [item.key]); // opening a recommendation starts at the top
 
@@ -67,7 +72,7 @@ export default function Detail({ item, hasWatch, hasPlex, hasOverseerr, onClose,
           <div className="herogrid">
             <div className="dposter"><Poster item={item} /></div>
             <div className="herotitle">
-              <span className={`badge ${avail[1]}`}>{avail[0]}</span>
+              <span className={`badge ${avail[1]}`}>{avail[0]}</span>{kept && <span className="badge keptbadge" title="Left out of the Stale list">Kept</span>}
               <h2>{item.title} {item.year ? <small>({item.year})</small> : null}</h2>
               <div className="sub">
                 {d?.certification && <span className="cert">{d.certification}</span>}
@@ -75,6 +80,7 @@ export default function Detail({ item, hasWatch, hasPlex, hasOverseerr, onClose,
               </div>
             </div>
             <div className="heroactions">
+              <button className={`withicon keepbtn ${kept ? 'on' : ''}`} onClick={toggleKeep} disabled={keepBusy} title={kept ? 'Stop leaving this out of the Stale list' : 'Leave this out of the Stale list'}><Icon name="shield" size={15} />{kept ? 'Kept' : 'Keep'}</button>
               <button className="danger" onClick={onDelete}>Delete…</button>
             </div>
           </div>

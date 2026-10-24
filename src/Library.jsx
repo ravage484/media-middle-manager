@@ -7,6 +7,7 @@ import Poster from './Poster.jsx';
 import Icon from './Icon.jsx';
 import ItemMenu from './ItemMenu.jsx';
 import PlexListDialog from './PlexListDialog.jsx';
+import { useKeep } from './keep.js';
 
 // Each sort returns an ascending comparator; the direction toggle flips it.
 const perEp = (i) => (i.type === 'show' && i.episodes ? i.size / i.episodes : i.size);
@@ -79,6 +80,8 @@ export default function Library({ goSettings }) {
   const last = useRef(null);
   const [kwSel, setKwSel] = useState(empty());
   const [panel, setPanel] = useState(false); // the filters panel
+  const keep = useKeep();
+  const [keepSel, setKeepSel] = useState(empty()); // Kept / Not kept
   const [colSel, setColSel] = useState(empty());
   const [plSel, setPlSel] = useState(empty());
   const [plex, setPlex] = useState({ map: {}, status: {} }); // what Plex says about each title, cached by the server
@@ -135,6 +138,7 @@ export default function Library({ goSettings }) {
     { id: 'types', label: 'Type', kind: 'chips', options: [['movie', 'Movies'], ['show', 'Shows']], value: types, set: setTypes },
     { id: 'statuses', label: 'Status', kind: 'chips', options: STATUS, value: statuses, set: setStatuses },
     hasWatch && { id: 'watches', label: 'Watched', kind: 'chips', options: WATCH, value: watches, set: setWatches },
+    { id: 'keep', label: 'Keep', kind: 'chips', options: [['kept', 'Kept'], ['notkept', 'Not kept']], value: keepSel, set: setKeepSel },
     { id: 'genres', label: 'Genre', kind: 'list', options: opts.genre, value: genres, set: setGenres },
     hasOverseerr && { id: 'kw', label: 'Keywords', kind: 'list', plain: true, options: kwOpts, value: kwSel, set: setKwSel, empty: 'No keywords yet. Settings > Library sync loads them from Overseerr.' },
     { id: 'tags', label: 'Tag', kind: 'list', options: opts.tag, value: tagSel, set: setTagSel },
@@ -152,8 +156,8 @@ export default function Library({ goSettings }) {
     staleDays && { id: 'stale', label: 'Not watched in', text: `${staleDays} days`, clear: () => setStaleDays('') },
     (minGB || maxGB) && { id: 'size', label: 'Size', text: `${minGB || 0} to ${maxGB || '∞'} GB`, clear: () => { setMinGB(''); setMaxGB(''); } },
   ].filter(Boolean);
-  const filtered = !!(types.size || statuses.size || instances.size || roots.size || genres.size || tagSel.size || kwSel.size || colSel.size || plSel.size || watches.size || staleDays || minGB || maxGB);
-  const clearFilters = () => { setColSel(empty()); setPlSel(empty()); setKwSel(empty()); setTagSel(empty());setTypes(empty()); setStatuses(empty()); setInstances(empty()); setRoots(empty()); setGenres(empty()); setWatches(empty()); setStaleDays(''); setMinGB(''); setMaxGB(''); };
+  const filtered = !!(types.size || statuses.size || instances.size || roots.size || genres.size || tagSel.size || kwSel.size || keepSel.size || colSel.size || plSel.size || watches.size || staleDays || minGB || maxGB);
+  const clearFilters = () => { setKeepSel(empty()); setColSel(empty()); setPlSel(empty()); setKwSel(empty()); setTagSel(empty());setTypes(empty()); setStatuses(empty()); setInstances(empty()); setRoots(empty()); setGenres(empty()); setWatches(empty()); setStaleDays(''); setMinGB(''); setMaxGB(''); };
 
   const shown = useMemo(() => {
     const t = q.trim().toLowerCase();
@@ -169,13 +173,14 @@ export default function Library({ goSettings }) {
         && (!genres.size || i.genres.some((g) => genres.has(g)))
         && (!tagSel.size || i.tags.some((g) => tagSel.has(g)) || (tagSel.has(UNTAGGED) && !i.tags.length))
         && (!kwSel.size || (kw.map[i.key] || []).some((k) => kwSel.has(k)))
+        && (!keepSel.size || keepSel.has(keep.map[i.key] ? 'kept' : 'notkept'))
         && (!colSel.size || (plex.map[i.key]?.collections || []).some((c) => colSel.has(c)))
         && (!plSel.size || (plex.map[i.key]?.playlists || []).some((p) => plSel.has(p)))
         && (!watches.size || [...watches].some((w) => WATCH_TEST[w](i)))
         && (!staleDays || stale(i, Number(staleDays)))
         && i.size >= min && i.size <= max)
       .sort((a, b) => (desc ? -1 : 1) * cmp(a, b));
-  }, [data.items, kw.map, kwSel, plex.map, colSel, plSel, q, types, statuses, instances, roots, genres, tagSel, watches, staleDays, minGB, maxGB, sort, desc]);
+  }, [data.items, kw.map, kwSel, keep.map, keepSel, plex.map, colSel, plSel, q, types, statuses, instances, roots, genres, tagSel, watches, staleDays, minGB, maxGB, sort, desc]);
   const shownBytes = useMemo(() => shown.reduce((n, i) => n + i.size, 0), [shown]);
 
   // Only the current page is rendered, which keeps the DOM (and poster requests) small.

@@ -23,6 +23,14 @@ It started with the part that is hardest to do by hand, **keeping the library ti
 
 ## Features
 
+**Discover** (needs Overseerr)
+- A **Discover** tab like Overseerr's: search for any movie or series, browse rows of *Trending*, *Popular*, and *Upcoming*, or browse by genre. What you already own is marked *In library*, and its card opens that title's library window right there on the Discover tab (not the request window).
+- Open a title for its overview, cast and rating, then **Request** it. For a series you choose the seasons: those already available or requested are shown and locked. The request is made through Overseerr, which sends it to Radarr or Sonarr exactly as a request made in Overseerr would. This is the only part of Discover that changes anything.
+
+**Stale content** (needs Tautulli or Plex)
+- A **Stale** tab listing titles nobody has watched for a while, biggest first, with how much space removing them would free. Choose how long counts as a while (3 months to 3 years, or any number of days), include or exclude never-watched and watched-before titles, filter by type and size, tick what you want, and delete with the same review window as the Library. Open a title for its details first if you want to check it.
+- **Keep:** to leave a title out of the list for good, click its shield icon (or tick several and use *Keep* in the bar, or use *Keep* in the title's window or its ... menu). Kept titles are listed under **Kept** at the top of the tab, with the date they were marked and a *Stop keeping* button, and a kept title shows a green *Kept* badge in its window. Keep only hides a title from Stale; it does not stop you deleting it elsewhere. The Library's filters have a *Keep* section (Kept / Not kept), and the Keep list is included in database backups and in exports.
+
 **Browse**
 - Poster library built from every Radarr and Sonarr instance you connect (1080p and 4K servers are merged into one title).
 - Tile, grid and list views, with paging (250 titles per page by default).

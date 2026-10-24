@@ -82,6 +82,14 @@ const MIGRATIONS = [
     fetched_at TEXT NOT NULL
   );
   `,
+  // v5: titles marked "Keep": left out of the Stale list until the mark is removed. This is the user's own choice, so unlike the
+  // caches above it travels with backups and exports.
+  `
+  CREATE TABLE keep (
+    key TEXT PRIMARY KEY,
+    at  TEXT NOT NULL
+  );
+  `,
 ];
 
 for (let v = db.pragma('user_version', { simple: true }); v < MIGRATIONS.length; v++) {
@@ -178,6 +186,25 @@ export const replacePlexMeta = db.transaction((entries) => {
   for (const [key, entry] of Object.entries(entries)) ins.run(key, JSON.stringify(entry), at);
 });
 
+/* ---------- Keep list ---------- */
+export const getKeepMap = () => Object.fromEntries(db.prepare('SELECT key, at FROM keep').all().map((r) => [r.key, r.at]));
+export const setKeepMany = db.transaction((keys, on) => {
+  const at = new Date().toISOString();
+  const add = db.prepare('INSERT OR IGNORE INTO keep (key, at) VALUES (?, ?)'); // keeping again leaves the original date
+  const del = db.prepare('DELETE FROM keep WHERE key = ?');
+  for (const k of keys) on ? add.run(k, at) : del.run(k);
+});
+// Entries that come with their own dates (an import file); one that is already kept stays as it is.
+export const addKeepEntries = db.transaction((entries) => {
+  const add = db.prepare('INSERT OR IGNORE INTO keep (key, at) VALUES (?, ?)');
+  for (const [k, at] of entries) add.run(k, at);
+});
+export const replaceKeep = db.transaction((entries) => {
+  db.exec('DELETE FROM keep');
+  const add = db.prepare('INSERT OR IGNORE INTO keep (key, at) VALUES (?, ?)');
+  for (const [k, at] of entries) add.run(k, at);
+});
+
 /* ---------- app settings (JSON values by key) ---------- */
 export const getSetting = (key, fallback) => {
   const r = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
@@ -241,7 +268,7 @@ export function restoreFrom(file, sourceKey) {
   db.prepare('ATTACH DATABASE ? AS bk').run(file);
   try {
     db.transaction(() => {
-      for (const t of ['sessions', 'users', 'history', 'services']) db.exec(`DELETE FROM main.${t}`);
+      for (const t of ['sessions', 'users', 'history', 'services', 'keep']) db.exec(`DELETE FROM main.${t}`);
       db.exec('INSERT INTO main.users SELECT * FROM bk.users');
       if (srcKey) {
         // Read each key with the supplied key and store it under this install's own key.
@@ -257,6 +284,7 @@ export function restoreFrom(file, sourceKey) {
         db.exec('INSERT INTO main.services SELECT * FROM bk.services');
       }
       db.exec('INSERT INTO main.history SELECT * FROM bk.history');
+      if (db.prepare("SELECT 1 FROM bk.sqlite_master WHERE type = 'table' AND name = 'keep'").get()) db.exec('INSERT INTO main.keep SELECT * FROM bk.keep');
     })();
   } finally { db.exec('DETACH DATABASE bk'); }
   protectSecrets(); // a backup from before encryption existed still holds plain text

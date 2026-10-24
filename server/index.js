@@ -7,6 +7,8 @@ import { listEpisodes, planEpisodes, executeEpisodes } from './episodes.js';
 import { getDetails } from './details.js';
 import { plexAct, resetPlexIndex } from './plex.js';
 import { getRecommendations } from './recommendations.js';
+import { keepMap, setKeep } from './keep.js';
+import { browse, search as discoverSearch, genres as discoverGenres, titleDetails, requestTitle } from './discover.js';
 import { plexPayload, syncPlexData, refreshEntry, acceptPlexHook, plexTick } from './plexcache.js';
 import { keywordsPayload, startSync, stopSync, setAuto, syncStatus, tick, acceptHook, hookToken } from './keywords.js';
 import { snapshot, restoreFrom, DATA, securityInfo } from './db.js';
@@ -157,6 +159,18 @@ app.post('/api/plex/act', wrap(async (req, res) => {
   await refreshEntry(key).catch(() => {}); // the cache follows the change at once
   res.json(result);
 }));
+
+// Discover (through Overseerr): browse, search, one title, and asking for it. Only the last one changes anything.
+const pageOf = (q) => Number(q.page || 1);
+app.get('/api/discover', wrap(async (req, res) => res.json(await browse({ section: String(req.query.section || ''), type: req.query.type, genre: Number(req.query.genre), page: pageOf(req.query) }))));
+app.get('/api/discover/search', wrap(async (req, res) => res.json(await discoverSearch(req.query.q, pageOf(req.query)))));
+app.get('/api/discover/genres', wrap(async (req, res) => res.json(await discoverGenres(req.query.type))));
+app.get('/api/discover/title', wrap(async (req, res) => res.json(await titleDetails(req.query.type, req.query.id))));
+app.post('/api/discover/request', wrap(async (req, res) => { const b = asObject(req.body); res.json(await requestTitle({ type: b.type, tmdbId: b.id, seasons: b.seasons })); }));
+
+// Keep: titles the Stale list leaves alone.
+app.get('/api/keep', (req, res) => res.json({ keep: keepMap() }));
+app.post('/api/keep', wrap(async (req, res) => { const b = asObject(req.body); res.json({ keep: setKeep(b.keys, b.keep) }); }));
 
 // Recommendations / similar titles from Overseerr, for the bottom of a title's window.
 app.get('/api/recommendations', wrap(async (req, res) => {
