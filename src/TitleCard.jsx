@@ -6,7 +6,7 @@ const BADGE = { 2: ['Requested', 'warn'], 3: ['Requested', 'warn'], 4: ['Partial
 
 export default function TitleCard({ r, onOpen, href, title }) {
   const [bad, setBad] = useState(false); // the poster could not be loaded: show the name instead of a broken-image icon
-  const badge = r.inLibrary ? ['In library', 'ok'] : BADGE[r.status];
+  const badge = r.badge ? [r.badge, 'dim'] : r.inLibrary ? ['In library', 'ok'] : BADGE[r.status];
   const inner = (
     <>
       <div className="rposter">

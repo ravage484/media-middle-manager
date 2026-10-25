@@ -8,6 +8,7 @@ import Icon from './Icon.jsx';
 import ItemMenu from './ItemMenu.jsx';
 import PlexListDialog from './PlexListDialog.jsx';
 import { useKeep } from './keep.js';
+import LoadingLogo from './LoadingLogo.jsx';
 
 // Each sort returns an ascending comparator; the direction toggle flips it.
 const perEp = (i) => (i.type === 'show' && i.episodes ? i.size / i.episodes : i.size);
@@ -52,7 +53,7 @@ const Trash = () => (
   </svg>
 );
 
-export default function Library({ goSettings }) {
+export default function Library({ goSettings, appearance, preset }) {
   const [data, setData] = useState({ items: [], errors: [], serviceTypes: [] });
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
@@ -156,6 +157,17 @@ export default function Library({ goSettings }) {
     staleDays && { id: 'stale', label: 'Not watched in', text: `${staleDays} days`, clear: () => setStaleDays('') },
     (minGB || maxGB) && { id: 'size', label: 'Size', text: `${minGB || 0} to ${maxGB || '∞'} GB`, clear: () => { setMinGB(''); setMaxGB(''); } },
   ].filter(Boolean);
+  // What Home asked for (a type, or one drive's titles biggest first) is applied once the library has loaded.
+  const applied = useRef(null);
+  useEffect(() => {
+    if (!preset || applied.current === preset || !data.items.length) return;
+    applied.current = preset;
+    const norm = (p) => String(p).toLowerCase().replace(/\//g, '\\').replace(/\\+$/, '');
+    setTypes(new Set(preset.types || []));
+    if (preset.drive) { const d = norm(preset.drive); setRoots(new Set(opts.root.map(([r]) => r).filter((r) => norm(r) === d || norm(r).startsWith(`${d}\\`)))); }
+    if (preset.sort && SORTS[preset.sort]) { setSort(preset.sort); setDesc(preset.desc !== false); }
+  }, [preset, data.items, opts]);
+
   const filtered = !!(types.size || statuses.size || instances.size || roots.size || genres.size || tagSel.size || kwSel.size || keepSel.size || colSel.size || plSel.size || watches.size || staleDays || minGB || maxGB);
   const clearFilters = () => { setKeepSel(empty()); setColSel(empty()); setPlSel(empty()); setKwSel(empty()); setTagSel(empty());setTypes(empty()); setStatuses(empty()); setInstances(empty()); setRoots(empty()); setGenres(empty()); setWatches(empty()); setStaleDays(''); setMinGB(''); setMaxGB(''); };
 
@@ -259,7 +271,11 @@ export default function Library({ goSettings }) {
       {err && <div className="notice bad">{err}</div>}
       {data.errors.map((e) => <div key={e} className="notice bad">{e}</div>)}
       {noServices && <div className="notice">No Radarr/Sonarr found. <button className="link" onClick={goSettings}>Add your services in Settings</button></div>}
-      <div className="count">{shown.length} of {data.items.length} titles · {fmtBytes(shownBytes)} matching</div>
+      {loading && !data.items.length ? (
+        <div className="libloading"><LoadingLogo style={appearance.logo} theme={appearance.theme} /><p className="dim">Loading your library…</p></div>
+      ) : (
+        <div className="count">{shown.length} of {data.items.length} titles · {fmtBytes(shownBytes)} matching</div>
+      )}
       {pager}
 
       {view === 'list' ? (

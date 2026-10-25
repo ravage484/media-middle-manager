@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import Library from './Library.jsx';
 import Settings from './Settings.jsx';
 import History from './History.jsx';
+import Home from './home/Home.jsx';
 import Discover from './Discover.jsx';
 import Stale from './Stale.jsx';
 import Login from './Login.jsx';
@@ -14,6 +15,7 @@ const Icon = ({ children }) => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>
 );
 const TABS = [
+  ['home', 'Home', <><path d="M3 11l9-8 9 8" /><path d="M5 10v10h14V10" /><path d="M10 20v-6h4v6" /></>],
   ['library', 'Library', <><path d="M16 6l4 14" /><path d="M12 6v14" /><path d="M8 8v12" /><path d="M4 4v16" /></>],
   ['discover', 'Discover', <><circle cx="12" cy="12" r="10" /><path d="M16.2 7.8l-2.1 6.3-6.3 2.1 2.1-6.3z" /></>],
   ['stale', 'Stale', <><path d="M5 22h14M5 2h14M17 22v-4.2a2 2 0 0 0-.6-1.4L12 12l-4.4 4.4A2 2 0 0 0 7 17.8V22M7 2v4.2a2 2 0 0 0 .6 1.4L12 12l4.4-4.4A2 2 0 0 0 17 6.2V2" /></>],
@@ -48,9 +50,11 @@ export default function App() {
 }
 
 function Shell({ auth, onSignOut }) {
-  const [tab, setTab] = useState('library');
-  const [visited, setVisited] = useState(new Set(['library'])); // tabs keep their state once opened
+  const [tab, setTab] = useState('home');
+  const [visited, setVisited] = useState(new Set(['home', 'library'])); // tabs keep their state once opened
   const go = (id) => { setTab(id); setVisited((v) => (v.has(id) ? v : new Set(v).add(id))); };
+  const [libPreset, setLibPreset] = useState(null); // filters Home asks the Library to start with
+  const navigate = (id, opts) => { if (id === 'library' && opts) setLibPreset(opts); go(id); };
   const [collapsed, setCollapsed] = useState(read);
   const [appearance, setAppearanceState] = useState(loadAppearance);
   const setAppearance = (a) => { applyAppearance(a); setAppearanceState(a); };
@@ -59,7 +63,7 @@ function Shell({ auth, onSignOut }) {
   return (
     <div className={`shell ${collapsed ? 'collapsed' : ''}`}>
       <aside className="side">
-        <button className="brand" onClick={() => go('library')} title="Go to Library">
+        <button className="brand" onClick={() => go('home')} title="Go to Home">
           <Logo style={appearance.logo} theme={appearance.theme} size={32} />
           <span className="label">Media Middle Manager</span>
         </button>
@@ -80,16 +84,25 @@ function Shell({ auth, onSignOut }) {
         </button>
         <button className="ver" onClick={() => go('settings')} title={`Media Middle Manager ${VERSION}. Click for details.`}>v{VERSION}</button>
       </aside>
+      {/* On a phone: two tabs, the logo (Home) in the exact middle, two tabs. Settings is the gear at the top of Home. */}
       <nav className="tabbar" aria-label="Main">
-        {TABS.map(([id, label, icon]) => (
-          <button key={id} className={tab === id ? 'active' : ''} onClick={() => go(id)} aria-label={label} aria-current={tab === id ? 'page' : undefined}>
-            <Icon>{icon}</Icon><span>{label}</span>
-          </button>
-        ))}
+        {['library', 'discover', 'home', 'stale', 'history'].map((id) => {
+          const [, label, icon] = TABS.find((t) => t[0] === id);
+          return id === 'home' ? (
+            <button key={id} className={`tablogo ${tab === id ? 'active' : ''}`} onClick={() => go(id)} aria-label="Home" aria-current={tab === id ? 'page' : undefined}>
+              <Logo style={appearance.logo} theme={appearance.theme} size={52} />
+            </button>
+          ) : (
+            <button key={id} className={tab === id ? 'active' : ''} onClick={() => go(id)} aria-label={label} aria-current={tab === id ? 'page' : undefined}>
+              <Icon>{icon}</Icon><span>{label}</span>
+            </button>
+          );
+        })}
       </nav>
       <main>
         {/* Tabs stay mounted once opened, so search, selection and scroll survive switching */}
-        <div hidden={tab !== 'library'}><Library goSettings={() => go('settings')} /></div>
+        <div hidden={tab !== 'home'}><Home active={tab === 'home'} onNavigate={navigate} /></div>
+        <div hidden={tab !== 'library'}><Library goSettings={() => go('settings')} appearance={appearance} preset={libPreset} /></div>
         {visited.has('discover') && <div hidden={tab !== 'discover'}><Discover goSettings={() => go('settings')} /></div>}
         {visited.has('stale') && <div hidden={tab !== 'stale'}><Stale /></div>}
         {tab === 'history' && <History />}

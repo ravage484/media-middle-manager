@@ -231,7 +231,7 @@ export async function getLibrary(force = false) {
 /* ---------- watch history (Tautulli preferred, Plex as fallback) ---------- */
 const norm = (t) => (t || '').toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]/g, '');
 
-async function tautulli(svc, cmd, params = {}) {
+export async function tautulli(svc, cmd, params = {}) {
   const r = await request(`${base(svc)}/api/v2?${new URLSearchParams({ apikey: svc.apiKey, cmd, ...params })}`, {});
   if (r.response?.result !== 'success') throw new Error(r.response?.message || 'Tautulli error');
   return r.response.data;

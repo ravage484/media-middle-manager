@@ -23,6 +23,17 @@ It started with the part that is hardest to do by hand, **keeping the library ti
 
 ## Features
 
+**Home**
+- The first tab shows what your services are doing, as **widgets**, in two layouts you flip between with the **Dashboard | Media** switch at the top right (remembered on this device; a phone starts on Media, a desktop on Dashboard).
+- **Dashboard** is everything at once: a strip of your services with a dot for up or down, four key numbers (library, space you could free, pending requests, download speed), and cards for *Now playing*, *Download queue*, *Pending requests*, *Coming up*, *Disk space*, then poster rows for *Recently added*, *Trending to request* and *Worth cleaning up*.
+- **Media** puts posters first: a banner for what was just added, the poster rows, and the operational widgets shrunk to status chips (*2 streaming*, *2 downloading*, *6 pending*, *14 TB reclaimable*). Click a chip to open its widget in place; the space chip opens the Stale tab.
+- Every row that names a movie or show has a small poster and is clickable: a title you own opens its library window right there, anything else opens the same lookup window as Discover (with the request button). On the queue, a download the service cannot time shows the time left from qBittorrent, and a stuck one gets a **Needs attention** badge that says why on hover and links to the queue page of the service that holds it. The Library tile has **Movies** and **Series** tags (with their sizes) that open the Library on that type, biggest first. The space tile is marked as an estimate (it counts titles not watched in a year, minus the ones you keep), and the whole tile opens the Stale tab. Coming up and Recently watched show the time as well as the day.
+- **Disk space**: click a drive (or its *Almost full* badge) to open the Library on the titles stored there, largest first.
+- The service chips at the top open each service's own site in a new tab.
+- **Recent requests** (Overseerr) lists the latest requests of any status with where each stands, and **Recently watched** (Tautulli) lists the latest plays, so the dashboard has something in every column.
+- **Pending requests** has **Approve** and **Decline** buttons. Each asks twice ("Sure?") before anything is sent to Overseerr.
+- Each widget only appears when a service that provides it is set up, refreshes at its own pace while the tab is on screen, and fails alone: if one service is down, that one card says so and the rest carry on. Both layouts read the same data, so flipping between them fetches nothing.
+
 **Discover** (needs Overseerr)
 - A **Discover** tab like Overseerr's: search for any movie or series, browse rows of *Trending*, *Popular*, and *Upcoming*, or browse by genre. What you already own is marked *In library*, and its card opens that title's library window right there on the Discover tab (not the request window).
 - Open a title for its overview, cast and rating, then **Request** it. For a series you choose the seasons: those already available or requested are shown and locked. The request is made through Overseerr, which sends it to Radarr or Sonarr exactly as a request made in Overseerr would. This is the only part of Discover that changes anything.
@@ -70,7 +81,7 @@ It started with the part that is hardest to do by hand, **keeping the library ti
 - Per-step results afterwards, and a **History** tab recording every deletion and the space freed.
 
 **Make it yours**
-- **Works on a phone.** On a narrow screen the side menu becomes a tab bar along the bottom, windows fill the screen (the ... menu and the delete review slide up from the bottom), tables keep only their key columns, and the hover-only buttons on posters are always visible, since a touch screen cannot hover.
+- **Works on a phone.** On a narrow screen the side menu becomes a tab bar along the bottom (the logo, which is Home, sits in the exact middle; Settings is the gear at the top of Home), windows fill the screen (the ... menu and the delete review slide up from the bottom), tables keep only their key columns, and the hover-only buttons on posters are always visible, since a touch screen cannot hover.
 - 12 color themes, 10 necktie logo styles, and 8 bundled fonts (no CDN, works offline).
 - Collapsible side navigation, and per-browser defaults for the delete window.
 
@@ -333,6 +344,25 @@ No. Plex only reports plays for the account that owns the token. Use Tautulli fo
 - Use a tag such as `keep` to protect titles from deletion
 - Edit Radarr and Sonarr tags from the library
 - Multiple users and roles
+
+## Adding widgets for a service
+
+Home is built from a registry in `server/widgets/`. One file per service (or group of services) lists the widgets it can show:
+
+```js
+export default {
+  type: 'tautulli', name: 'Tautulli',
+  widgets: [{
+    id: 'now-playing', title: 'Now playing', kind: 'list',   // how the browser draws it
+    requires: ['tautulli', 'plex'],                           // shown only when one of these is set up
+    refresh: 15,                                              // seconds: server cache time and polling interval
+    order: 20, control: { span: 2 }, media: 'chip',           // place in Dashboard (of 4 columns) and in Media
+    fetch: async () => ({ rows: [{ id, title, subtitle, progress }], chip: '2 streaming' }),
+  }],
+};
+```
+
+Add the file to the list in `server/widgets/index.js`. The kinds are `status`, `stat` (`{ value, sub }`), `list` (`{ rows, empty }`, where a row can carry `progress`, `badge`, `right`, `when` and `actions`) and `posters` (`{ items }`); a widget that reuses one needs no screen code. Whatever `fetch` returns came from another service, so cut it down with the helpers in `server/widgets/util.js`. A widget that can change something lists each change by name under `actions`; nothing else can be triggered, and the buttons for it ask twice.
 
 ## Credits and trademarks
 

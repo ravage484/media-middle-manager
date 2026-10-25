@@ -8,6 +8,7 @@ import { getDetails } from './details.js';
 import { plexAct, resetPlexIndex } from './plex.js';
 import { getRecommendations } from './recommendations.js';
 import { keepMap, setKeep } from './keep.js';
+import { listWidgets, widgetData, widgetAction, resetWidgetCache } from './widgets/index.js';
 import { browse, search as discoverSearch, genres as discoverGenres, titleDetails, requestTitle } from './discover.js';
 import { plexPayload, syncPlexData, refreshEntry, acceptPlexHook, plexTick } from './plexcache.js';
 import { keywordsPayload, startSync, stopSync, setAuto, syncStatus, tick, acceptHook, hookToken } from './keywords.js';
@@ -96,6 +97,7 @@ app.put('/api/services', wrap((req, res) => {
   if (new Set(list.map((s) => s.id)).size !== list.length) return bad(res, 'Duplicate service ids');
   saveServices(list);
   resetPlexIndex();
+  resetWidgetCache();
   res.json(getServices().map(mask));
 }));
 app.post('/api/services/test', wrap(async (req, res) => {
@@ -168,9 +170,14 @@ app.get('/api/discover/genres', wrap(async (req, res) => res.json(await discover
 app.get('/api/discover/title', wrap(async (req, res) => res.json(await titleDetails(req.query.type, req.query.id))));
 app.post('/api/discover/request', wrap(async (req, res) => { const b = asObject(req.body); res.json(await requestTitle({ type: b.type, tmdbId: b.id, seasons: b.seasons })); }));
 
+// Home widgets: what can be shown, the data for one, and the few things a widget may change (each named in its adapter).
+app.get('/api/widgets', (req, res) => res.json({ widgets: listWidgets() }));
+app.get('/api/widgets/data', wrap(async (req, res) => res.json(await widgetData(typeof req.query.id === 'string' ? req.query.id : ''))));
+app.post('/api/widgets/action', wrap(async (req, res) => { const b = asObject(req.body); res.json(await widgetAction(b.id, b.action, b.arg)); }));
+
 // Keep: titles the Stale list leaves alone.
 app.get('/api/keep', (req, res) => res.json({ keep: keepMap() }));
-app.post('/api/keep', wrap(async (req, res) => { const b = asObject(req.body); res.json({ keep: setKeep(b.keys, b.keep) }); }));
+app.post('/api/keep', wrap(async (req, res) => { const b = asObject(req.body); const keep = setKeep(b.keys, b.keep); resetWidgetCache(); res.json({ keep }); }));
 
 // Recommendations / similar titles from Overseerr, for the bottom of a title's window.
 app.get('/api/recommendations', wrap(async (req, res) => {

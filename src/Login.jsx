@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api } from './api.js';
 import Logo from './Logo.jsx';
+import TieBackdrop from './TieBackdrop.jsx';
 import { loadAppearance } from './themes.js';
 import { VERSION } from './version.js';
 
@@ -27,6 +28,7 @@ export default function Login({ mode, onDone }) {
 
   return (
     <div className="loginpage">
+      <TieBackdrop />
       <form className="logincard" onSubmit={submit}>
         <div className="loginbrand"><Logo style={a.logo} theme={a.theme} size={48} /><h1>Media Middle Manager</h1></div>
         <h2>{setup ? 'Create your account' : 'Sign in'}</h2>
