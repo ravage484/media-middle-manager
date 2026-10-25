@@ -1,12 +1,13 @@
 import crypto from 'node:crypto';
 import { getServices, saveServices, getHistory, addHistory, replaceHistory } from './db.js';
 import { keepForExport, keepFromImport } from './keep.js';
+import { testTdarr } from './tdarr.js';
 
 export { getServices, saveServices, getHistory };
 export const resetLibraryCache = () => { cache.at = 0; }; // after services change underneath us (e.g. a restore)
 
 /* ---------- export / import of settings ---------- */
-const SERVICE_TYPES = ['radarr', 'sonarr', 'overseerr', 'prowlarr', 'qbittorrent', 'tautulli', 'plex'];
+const SERVICE_TYPES = ['radarr', 'sonarr', 'overseerr', 'prowlarr', 'qbittorrent', 'tautulli', 'plex', 'tdarr'];
 const str = (v, max) => (typeof v === 'string' ? v.slice(0, max) : '');
 const normUrl = (u) => u.trim().replace(/\/+$/, '').toLowerCase();
 
@@ -112,10 +113,10 @@ async function request(url, init) {
   try { return text ? JSON.parse(text) : null; } catch { return text; }
 }
 
-// Radarr / Sonarr / Prowlarr / Overseerr (X-Api-Key) and Plex (X-Plex-Token)
+// Radarr / Sonarr / Prowlarr / Overseerr (X-Api-Key), Plex (X-Plex-Token) and Tdarr (x-api-key, optional on its side)
 export function api(svc, p, { method = 'GET', body } = {}) {
   const headers = { Accept: 'application/json' };
-  headers[svc.type === 'plex' ? 'X-Plex-Token' : 'X-Api-Key'] = svc.apiKey;
+  if (svc.type !== 'tdarr' || svc.apiKey) headers[svc.type === 'plex' ? 'X-Plex-Token' : 'X-Api-Key'] = svc.apiKey;
   if (body) headers['Content-Type'] = 'application/json';
   return request(base(svc) + p, { method, headers, body: body && JSON.stringify(body) });
 }
@@ -159,6 +160,7 @@ export async function testService(svc) {
     }
     case 'qbittorrent': return 'qBittorrent ' + (await qb(svc, '/api/v2/app/version'));
     case 'tautulli': { const l = await tautulli(svc, 'get_libraries'); return `Tautulli, ${l.length} libraries`; }
+    case 'tdarr': return testTdarr(svc);
     case 'plex': { const d = await api(svc, '/library/sections'); return `${d.MediaContainer.Directory?.length ?? 0} libraries`; }
     default: throw new Error('Unknown service type');
   }

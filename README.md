@@ -366,7 +366,7 @@ Add the file to the list in `server/widgets/index.js`. The kinds are `status`, `
 
 ## Credits and trademarks
 
-Service logos shown in the Settings page belong to their respective owners (Radarr, Sonarr, Prowlarr, Overseerr, qBittorrent, Plex, Tautulli), and so do the rating marks shown in a title's window (IMDb, TMDB, Rotten Tomatoes, Metacritic; the artwork comes from the CC0 [Simple Icons](https://simpleicons.org) set) and are used only to identify those services. This project is not affiliated with or endorsed by any of them.
+Service logos shown in the Settings page belong to their respective owners (Radarr, Sonarr, Prowlarr, Overseerr, qBittorrent, Plex, Tautulli, Tdarr), and so do the rating marks shown in a title's window (IMDb, TMDB, Rotten Tomatoes, Metacritic; the artwork comes from the CC0 [Simple Icons](https://simpleicons.org) set) and are used only to identify those services. This project is not affiliated with or endorsed by any of them.
 
 ## License
 
