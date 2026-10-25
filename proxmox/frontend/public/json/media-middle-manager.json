@@ -11,7 +11,7 @@
   "website": "https://github.com/ravage484/media-middle-manager",
   "logo": "https://raw.githubusercontent.com/ravage484/media-middle-manager/main/public/favicon.svg",
   "config_path": "/opt/media-middle-manager_data/mmm.db",
-  "description": "One place to browse and manage your media stack. It connects to Radarr, Sonarr, Overseerr, qBittorrent, Tautulli and Plex and shows your library as posters, with ratings, files, tags, sizes and watch history for every title. Filter and sort by size, tags or what nobody watches, and clean up whole titles or single episodes so they stay removed (request, monitoring, files and torrents), with Radarr and Sonarr keeping the history. Requesting new media is planned.",
+  "description": "One place to browse and manage your media stack. It connects to Radarr, Sonarr, Overseerr, qBittorrent, Tautulli, Plex and Tdarr and shows your library as posters, with ratings, files, tags, sizes and watch history for every title. Filter and sort by size, tags or what nobody watches, and clean up whole titles or single episodes so they stay removed (request, monitoring, files and torrents), with Radarr and Sonarr keeping the history. Requesting new media is planned.",
   "install_methods": [
     {
       "type": "default",
@@ -35,7 +35,7 @@
       "type": "warning"
     },
     {
-      "text": "Add your Radarr, Sonarr, Overseerr, qBittorrent, Tautulli and Plex connections under Settings after install. Everything is stored in the SQLite database /opt/media-middle-manager_data/mmm.db, with API keys encrypted using /opt/media-middle-manager_data/secret.key. Back that key file up separately: without it the stored keys cannot be recovered.",
+      "text": "Add your Radarr, Sonarr, Overseerr, qBittorrent, Tautulli, Plex and Tdarr connections under Settings after install. Everything is stored in the SQLite database /opt/media-middle-manager_data/mmm.db, with API keys encrypted using /opt/media-middle-manager_data/secret.key. Back that key file up separately: without it the stored keys cannot be recovered.",
       "type": "info"
     }
   ]

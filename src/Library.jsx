@@ -7,6 +7,8 @@ import Poster from './Poster.jsx';
 import Icon from './Icon.jsx';
 import ItemMenu from './ItemMenu.jsx';
 import PlexListDialog from './PlexListDialog.jsx';
+import { useKeep } from './keep.js';
+import LoadingLogo from './LoadingLogo.jsx';
 
 // Each sort returns an ascending comparator; the direction toggle flips it.
 const perEp = (i) => (i.type === 'show' && i.episodes ? i.size / i.episodes : i.size);
@@ -51,7 +53,7 @@ const Trash = () => (
   </svg>
 );
 
-export default function Library({ goSettings }) {
+export default function Library({ goSettings, appearance, preset }) {
   const [data, setData] = useState({ items: [], errors: [], serviceTypes: [] });
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
@@ -79,6 +81,8 @@ export default function Library({ goSettings }) {
   const last = useRef(null);
   const [kwSel, setKwSel] = useState(empty());
   const [panel, setPanel] = useState(false); // the filters panel
+  const keep = useKeep();
+  const [keepSel, setKeepSel] = useState(empty()); // Kept / Not kept
   const [colSel, setColSel] = useState(empty());
   const [plSel, setPlSel] = useState(empty());
   const [plex, setPlex] = useState({ map: {}, status: {} }); // what Plex says about each title, cached by the server
@@ -135,6 +139,7 @@ export default function Library({ goSettings }) {
     { id: 'types', label: 'Type', kind: 'chips', options: [['movie', 'Movies'], ['show', 'Shows']], value: types, set: setTypes },
     { id: 'statuses', label: 'Status', kind: 'chips', options: STATUS, value: statuses, set: setStatuses },
     hasWatch && { id: 'watches', label: 'Watched', kind: 'chips', options: WATCH, value: watches, set: setWatches },
+    { id: 'keep', label: 'Keep', kind: 'chips', options: [['kept', 'Kept'], ['notkept', 'Not kept']], value: keepSel, set: setKeepSel },
     { id: 'genres', label: 'Genre', kind: 'list', options: opts.genre, value: genres, set: setGenres },
     hasOverseerr && { id: 'kw', label: 'Keywords', kind: 'list', plain: true, options: kwOpts, value: kwSel, set: setKwSel, empty: 'No keywords yet. Settings > Library sync loads them from Overseerr.' },
     { id: 'tags', label: 'Tag', kind: 'list', options: opts.tag, value: tagSel, set: setTagSel },
@@ -152,8 +157,19 @@ export default function Library({ goSettings }) {
     staleDays && { id: 'stale', label: 'Not watched in', text: `${staleDays} days`, clear: () => setStaleDays('') },
     (minGB || maxGB) && { id: 'size', label: 'Size', text: `${minGB || 0} to ${maxGB || '∞'} GB`, clear: () => { setMinGB(''); setMaxGB(''); } },
   ].filter(Boolean);
-  const filtered = !!(types.size || statuses.size || instances.size || roots.size || genres.size || tagSel.size || kwSel.size || colSel.size || plSel.size || watches.size || staleDays || minGB || maxGB);
-  const clearFilters = () => { setColSel(empty()); setPlSel(empty()); setKwSel(empty()); setTagSel(empty());setTypes(empty()); setStatuses(empty()); setInstances(empty()); setRoots(empty()); setGenres(empty()); setWatches(empty()); setStaleDays(''); setMinGB(''); setMaxGB(''); };
+  // What Home asked for (a type, or one drive's titles biggest first) is applied once the library has loaded.
+  const applied = useRef(null);
+  useEffect(() => {
+    if (!preset || applied.current === preset || !data.items.length) return;
+    applied.current = preset;
+    const norm = (p) => String(p).toLowerCase().replace(/\//g, '\\').replace(/\\+$/, '');
+    setTypes(new Set(preset.types || []));
+    if (preset.drive) { const d = norm(preset.drive); setRoots(new Set(opts.root.map(([r]) => r).filter((r) => norm(r) === d || norm(r).startsWith(`${d}\\`)))); }
+    if (preset.sort && SORTS[preset.sort]) { setSort(preset.sort); setDesc(preset.desc !== false); }
+  }, [preset, data.items, opts]);
+
+  const filtered = !!(types.size || statuses.size || instances.size || roots.size || genres.size || tagSel.size || kwSel.size || keepSel.size || colSel.size || plSel.size || watches.size || staleDays || minGB || maxGB);
+  const clearFilters = () => { setKeepSel(empty()); setColSel(empty()); setPlSel(empty()); setKwSel(empty()); setTagSel(empty());setTypes(empty()); setStatuses(empty()); setInstances(empty()); setRoots(empty()); setGenres(empty()); setWatches(empty()); setStaleDays(''); setMinGB(''); setMaxGB(''); };
 
   const shown = useMemo(() => {
     const t = q.trim().toLowerCase();
@@ -169,13 +185,14 @@ export default function Library({ goSettings }) {
         && (!genres.size || i.genres.some((g) => genres.has(g)))
         && (!tagSel.size || i.tags.some((g) => tagSel.has(g)) || (tagSel.has(UNTAGGED) && !i.tags.length))
         && (!kwSel.size || (kw.map[i.key] || []).some((k) => kwSel.has(k)))
+        && (!keepSel.size || keepSel.has(keep.map[i.key] ? 'kept' : 'notkept'))
         && (!colSel.size || (plex.map[i.key]?.collections || []).some((c) => colSel.has(c)))
         && (!plSel.size || (plex.map[i.key]?.playlists || []).some((p) => plSel.has(p)))
         && (!watches.size || [...watches].some((w) => WATCH_TEST[w](i)))
         && (!staleDays || stale(i, Number(staleDays)))
         && i.size >= min && i.size <= max)
       .sort((a, b) => (desc ? -1 : 1) * cmp(a, b));
-  }, [data.items, kw.map, kwSel, plex.map, colSel, plSel, q, types, statuses, instances, roots, genres, tagSel, watches, staleDays, minGB, maxGB, sort, desc]);
+  }, [data.items, kw.map, kwSel, keep.map, keepSel, plex.map, colSel, plSel, q, types, statuses, instances, roots, genres, tagSel, watches, staleDays, minGB, maxGB, sort, desc]);
   const shownBytes = useMemo(() => shown.reduce((n, i) => n + i.size, 0), [shown]);
 
   // Only the current page is rendered, which keeps the DOM (and poster requests) small.
@@ -187,12 +204,12 @@ export default function Library({ goSettings }) {
   const go = (p) => { setPage(Math.max(0, Math.min(pages - 1, p))); window.scrollTo({ top: 0 }); };
   const pager = shown.length > 0 && (
     <div className="pager">
-      <button className="withicon" onClick={() => go(0)} disabled={start === 0}><Icon name="chevronsLeft" />First</button>
+      <button className="withicon hm" onClick={() => go(0)} disabled={start === 0}><Icon name="chevronsLeft" />First</button>
       <button className="withicon" onClick={() => go(page - 1)} disabled={start === 0}><Icon name="chevronLeft" />Prev</button>
       <span>{start + 1}–{start + paged.length} of {shown.length} · page {Math.min(page, pages - 1) + 1} of {pages}</span>
       <button className="withicon" onClick={() => go(page + 1)} disabled={page >= pages - 1}>Next<Icon name="chevronRight" /></button>
-      <button className="withicon" onClick={() => go(pages - 1)} disabled={page >= pages - 1}>Last<Icon name="chevronsRight" /></button>
-      <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} title="Titles per page">
+      <button className="withicon hm" onClick={() => go(pages - 1)} disabled={page >= pages - 1}>Last<Icon name="chevronsRight" /></button>
+      <select className="hm" value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} title="Titles per page">
         {[100, 250, 500, 1000].map((n) => <option key={n} value={n}>{n} per page</option>)}
       </select>
     </div>
@@ -254,12 +271,16 @@ export default function Library({ goSettings }) {
       {err && <div className="notice bad">{err}</div>}
       {data.errors.map((e) => <div key={e} className="notice bad">{e}</div>)}
       {noServices && <div className="notice">No Radarr/Sonarr found. <button className="link" onClick={goSettings}>Add your services in Settings</button></div>}
-      <div className="count">{shown.length} of {data.items.length} titles · {fmtBytes(shownBytes)} matching</div>
+      {loading && !data.items.length ? (
+        <div className="libloading"><LoadingLogo style={appearance.logo} theme={appearance.theme} /><p className="dim">Loading your library…</p></div>
+      ) : (
+        <div className="count">{shown.length} of {data.items.length} titles · {fmtBytes(shownBytes)} matching</div>
+      )}
       {pager}
 
       {view === 'list' ? (
         <table className="list">
-          <thead><tr><th /><th /><th>Title</th><th>Type</th><th>Managed by</th><th>Size</th><th>Rating</th>{hasWatch && <th>Watched</th>}<th>Status</th><th /></tr></thead>
+          <thead><tr><th /><th /><th>Title</th><th className="hm">Type</th><th className="hm">Managed by</th><th>Size</th><th className="hm">Rating</th>{hasWatch && <th className="hm">Watched</th>}<th className="hm">Status</th><th /></tr></thead>
           <tbody>
             {paged.map((it, i) => { const idx = start + i;
               const p = props(it, idx);
@@ -268,12 +289,12 @@ export default function Library({ goSettings }) {
                   <td onClick={p.onCheck}><input type="checkbox" readOnly checked={p.selected} /></td>
                   <td className="thumb"><Poster item={it} /></td>
                   <td><b>{it.title}</b> <small>{it.year}</small> <Tags item={it} /></td>
-                  <td>{it.type === 'movie' ? 'Movie' : 'Series'}</td>
-                  <td>{it.instances.map((i) => i.serviceName).join(', ')}</td>
-                  <td>{fmtBytes(it.size)}</td>
-                  <td>{it.rating ? it.rating.toFixed(1) : ''}</td>
-                  {hasWatch && <td>{watchLabel(it.watch)}</td>}
-                  <td>{it.hasFile ? (it.monitored ? 'On disk' : 'On disk, unmonitored') : it.monitored ? 'Missing' : 'No file, unmonitored'}</td>
+                  <td className="hm">{it.type === 'movie' ? 'Movie' : 'Series'}</td>
+                  <td className="hm">{it.instances.map((i) => i.serviceName).join(', ')}</td>
+                  <td className="nw">{fmtBytes(it.size)}</td>
+                  <td className="hm">{it.rating ? it.rating.toFixed(1) : ''}</td>
+                  {hasWatch && <td className="hm">{watchLabel(it.watch)}</td>}
+                  <td className="hm">{it.hasFile ? (it.monitored ? 'On disk' : 'On disk, unmonitored') : it.monitored ? 'Missing' : 'No file, unmonitored'}</td>
                   <td className="rowbtns"><button className="icon" title="More actions" onClick={p.onMenu}><Icon name="more" size={16} strokeWidth={3} /></button><button className="icon" title="Delete" onClick={p.onDelete}><Trash /></button></td>
                 </tr>
               );

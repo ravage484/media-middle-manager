@@ -1,0 +1,25 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Loading logo mockup</title>
+<style>
+  body { margin: 0; font: 14px system-ui, sans-serif; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); min-height: 100vh; }
+  figure { margin: 0; display: grid; place-items: center; align-content: center; gap: 12px; padding: 32px; }
+  figcaption { opacity: .6; }
+  .dark { background: #0f1117; color: #e5e7eb; }
+  .light { background: #f4f4f8; color: #333; }
+  .row { display: flex; gap: 20px; align-items: flex-end; }
+  .caption { letter-spacing: .08em; text-transform: uppercase; font-size: 12px; animation: fade 1.6s ease-in-out infinite alternate; }
+  @keyframes fade { from { opacity: .35; } to { opacity: .9; } }
+</style>
+<figure class="dark">
+  <img src="loading-logo.svg" width="120" alt="">
+  <div class="caption">Loading…</div>
+</figure>
+<figure class="light">
+  <img src="loading-logo.svg" width="120" alt="">
+  <div class="caption">Loading…</div>
+</figure>
+<figure class="dark">
+  <div class="row"><img src="loading-logo.svg" width="24" alt=""><img src="loading-logo.svg" width="48" alt=""><img src="loading-logo.svg" width="80" alt=""></div>
+  <figcaption>24 / 48 / 80 px</figcaption>
+</figure>

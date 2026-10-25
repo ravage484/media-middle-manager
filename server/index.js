@@ -7,8 +7,11 @@ import { listEpisodes, planEpisodes, executeEpisodes } from './episodes.js';
 import { getDetails } from './details.js';
 import { plexAct, resetPlexIndex } from './plex.js';
 import { getRecommendations } from './recommendations.js';
+import { keepMap, setKeep } from './keep.js';
+import { listWidgets, widgetData, widgetAction, resetWidgetCache } from './widgets/index.js';
+import { browse, search as discoverSearch, genres as discoverGenres, titleDetails, requestTitle } from './discover.js';
 import { plexPayload, syncPlexData, refreshEntry, acceptPlexHook, plexTick } from './plexcache.js';
-import { keywordsPayload, startSync, stopSync, setAuto, syncStatus, tick, acceptHook, hookToken } from './keywords.js';
+import { keywordsPayload, startSync, stopSync, setAuto, getAuto, syncStatus, tick, acceptHook, hookToken } from './keywords.js';
 import { snapshot, restoreFrom, DATA, securityInfo } from './db.js';
 import { authRoutes, requireAuth, sameOrigin, bootstrapAdmin, AUTH_DISABLED } from './auth.js';
 
@@ -21,7 +24,7 @@ if (process.env.MMM_TRUST_PROXY === 'true') app.set('trust proxy', true); // beh
 // Everything the app loads comes from itself, except poster images, which are fetched from the image hosts Radarr/Sonarr name.
 const CSP = [
   "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline'", "img-src 'self' data: https: http:",
-  "font-src 'self' data:", "connect-src 'self'", "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'none'",
+  "font-src 'self' data:", "connect-src 'self'", 'frame-src https://www.youtube-nocookie.com', "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'none'",
 ].join('; ');
 app.use((req, res, next) => {
   res.setHeader('Content-Security-Policy', CSP);
@@ -94,6 +97,7 @@ app.put('/api/services', wrap((req, res) => {
   if (new Set(list.map((s) => s.id)).size !== list.length) return bad(res, 'Duplicate service ids');
   saveServices(list);
   resetPlexIndex();
+  resetWidgetCache();
   res.json(getServices().map(mask));
 }));
 app.post('/api/services/test', wrap(async (req, res) => {
@@ -158,6 +162,23 @@ app.post('/api/plex/act', wrap(async (req, res) => {
   res.json(result);
 }));
 
+// Discover (through Overseerr): browse, search, one title, and asking for it. Only the last one changes anything.
+const pageOf = (q) => Number(q.page || 1);
+app.get('/api/discover', wrap(async (req, res) => res.json(await browse({ section: String(req.query.section || ''), type: req.query.type, genre: Number(req.query.genre), page: pageOf(req.query) }))));
+app.get('/api/discover/search', wrap(async (req, res) => res.json(await discoverSearch(req.query.q, pageOf(req.query)))));
+app.get('/api/discover/genres', wrap(async (req, res) => res.json(await discoverGenres(req.query.type))));
+app.get('/api/discover/title', wrap(async (req, res) => res.json(await titleDetails(req.query.type, req.query.id))));
+app.post('/api/discover/request', wrap(async (req, res) => { const b = asObject(req.body); res.json(await requestTitle({ type: b.type, tmdbId: b.id, seasons: b.seasons })); }));
+
+// Home widgets: what can be shown, the data for one, and the few things a widget may change (each named in its adapter).
+app.get('/api/widgets', (req, res) => res.json({ widgets: listWidgets() }));
+app.get('/api/widgets/data', wrap(async (req, res) => res.json(await widgetData(typeof req.query.id === 'string' ? req.query.id : ''))));
+app.post('/api/widgets/action', wrap(async (req, res) => { const b = asObject(req.body); res.json(await widgetAction(b.id, b.action, b.arg)); }));
+
+// Keep: titles the Stale list leaves alone.
+app.get('/api/keep', (req, res) => res.json({ keep: keepMap() }));
+app.post('/api/keep', wrap(async (req, res) => { const b = asObject(req.body); const keep = setKeep(b.keys, b.keep); resetWidgetCache(); res.json({ keep }); }));
+
 // Recommendations / similar titles from Overseerr, for the bottom of a title's window.
 app.get('/api/recommendations', wrap(async (req, res) => {
   let key; try { key = cleanKeys([req.query.key])[0]; } catch { return bad(res, 'Expected a title'); }
@@ -185,12 +206,22 @@ app.post('/api/episodes/delete', wrap(async (req, res) => {
   res.json(await executeEpisodes(key, selection, { torrents: o.torrents === true, plex: o.plex === true })); // files are the point; nothing else is on by default
 }));
 
+// App-wide settings that live in the database rather than in services: how the keyword and Plex caches are kept up to date.
+// Webhook tokens are left out on purpose (they are secrets; a new one is made when the webhook is switched on).
 app.get('/api/export', wrap((req, res) => {
-  res.json(exportData({ secrets: req.query.secrets === '1', history: req.query.history !== '0' }));
+  res.json({ ...exportData({ secrets: req.query.secrets === '1', history: req.query.history !== '0' }), settings: { autoUpdate: getAuto() } });
 }));
 app.post('/api/import', bigJson, wrap((req, res) => {
-  try { res.json(importData(asObject(req.body).data, asObject(asObject(req.body).options))); }
-  catch (e) { res.status(400).json({ error: e.message }); }
+  try {
+    const body = asObject(req.body);
+    const stats = importData(body.data, asObject(body.options));
+    const auto = asObject(asObject(body.data).settings).autoUpdate;
+    if (auto !== undefined) {
+      try { setAuto(auto); stats.settingsApplied = true; } catch { stats.settingsApplied = false; } // a bad value in the file never undoes the import
+      tick(); plexTick();
+    }
+    res.json(stats);
+  } catch (e) { res.status(400).json({ error: e.message }); }
 }));
 
 app.get('/api/security', (req, res) => res.json(securityInfo()));

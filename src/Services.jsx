@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from './api.js';
 import ServiceIcon from './ServiceIcon.jsx';
 
-const INFO = { radarr: ['Radarr', 7878], sonarr: ['Sonarr', 8989], overseerr: ['Overseerr', 5055], qbittorrent: ['qBittorrent', 8080], prowlarr: ['Prowlarr', 9696], tautulli: ['Tautulli', 8181], plex: ['Plex', 32400] };
+const INFO = { radarr: ['Radarr', 7878], sonarr: ['Sonarr', 8989], overseerr: ['Overseerr', 5055], qbittorrent: ['qBittorrent', 8080], prowlarr: ['Prowlarr', 9696], tautulli: ['Tautulli', 8181], plex: ['Plex', 32400], tdarr: ['Tdarr', 8265] };
 // One section per service.
 const HINTS = {
   radarr: 'Your movie libraries. Required for movies: titles appear on the Library page with their ratings, files and tags, and clean-up unmonitors them here and removes the files. Add one entry per instance, for example separate 1080p and 4K servers.',
@@ -12,8 +12,9 @@ const HINTS = {
   prowlarr: 'Connection test only. The delete workflow never uses Prowlarr.',
   tautulli: 'Last watched and play counts across every Plex user. Preferred over Plex for watch history.',
   plex: 'Watch history for the token owner only, and an optional library rescan after a delete.',
+  tdarr: 'Transcoding and processing flows (audio and video conversion, subtitles) that titles go through before they reach Plex. For now: connection test only. The API key is optional, and only needed if you enabled one in Tdarr.',
 };
-const GROUPS = ['radarr', 'sonarr', 'overseerr', 'qbittorrent', 'prowlarr', 'tautulli', 'plex']
+const GROUPS = ['radarr', 'sonarr', 'overseerr', 'qbittorrent', 'prowlarr', 'tautulli', 'plex', 'tdarr']
   .map((t) => ({ title: INFO[t][0], types: [t], hint: HINTS[t] }));
 const blank = (type, list) => {
   const same = list.filter((s) => s.type === type).length;
@@ -43,7 +44,7 @@ function ServiceDialog({ initial, onSave, onClose }) {
             <label>Username<input value={s.username || ''} onChange={(e) => set('username', e.target.value)} /></label>
             <label>Password<input type="password" value={s.password || ''} onChange={(e) => set('password', e.target.value)} /></label>
           </> : (
-            <label>{s.type === 'plex' ? 'Plex token' : 'API key'}
+            <label>{s.type === 'plex' ? 'Plex token' : s.type === 'tdarr' ? 'API key (optional)' : 'API key'}
               <input type="password" value={s.apiKey || ''} onChange={(e) => set('apiKey', e.target.value)} autoComplete="off" />
             </label>
           )}
@@ -110,7 +111,7 @@ export default function Services() {
                 <div className="sbody">
                   <div className="sinfo">
                     <b>{s.name}</b>
-                    <div><span className="k">Address</span> {s.url}</div>
+                    <div><span className="k">Address</span> <a className="slink" href={s.url} target="_blank" rel="noopener noreferrer">{s.url}</a></div>
                     <div className="sstat">
                       {status[s.id] ? <><i className={`dot ${status[s.id].state}`} />{status[s.id].detail}</> : <span className="dim">Not tested</span>}
                     </div>

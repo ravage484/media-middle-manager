@@ -5,7 +5,7 @@
 <h1 align="center">Media Middle Manager</h1>
 
 <p align="center">
-  One place to browse and manage your whole media stack: your Radarr and Sonarr libraries, with Overseerr, qBittorrent, Tautulli and Plex alongside.
+  One place to browse and manage your whole media stack: your Radarr and Sonarr libraries, with Overseerr, qBittorrent, Tautulli, Plex and Tdarr alongside.
 </p>
 
 > [!WARNING]
@@ -23,16 +23,35 @@ It started with the part that is hardest to do by hand, **keeping the library ti
 
 ## Features
 
+**Home**
+- The first tab shows what your services are doing, as **widgets**, in two layouts you flip between with the **Dashboard | Media** switch at the top right (remembered on this device; a phone starts on Media, a desktop on Dashboard).
+- **Dashboard** is everything at once: a strip of your services with a dot for up or down, four key numbers (library, space you could free, pending requests, download speed), and cards for *Now playing*, *Download queue*, *Pending requests*, *Coming up*, *Disk space*, then poster rows for *Recently added*, *Trending to request* and *Worth cleaning up*.
+- **Media** puts posters first: a banner for what was just added, the poster rows, and the operational widgets shrunk to status chips (*2 streaming*, *2 downloading*, *6 pending*, *14 TB reclaimable*). Click a chip to open its widget in place; the space chip opens the Stale tab.
+- Every row that names a movie or show has a small poster and is clickable: a title you own opens its library window right there, anything else opens the same lookup window as Discover (with the request button). On the queue, a download the service cannot time shows the time left from qBittorrent, and a stuck one gets a **Needs attention** badge that says why on hover and links to the queue page of the service that holds it. The Library tile has **Movies** and **Series** tags (with their sizes) that open the Library on that type, biggest first. The space tile is marked as an estimate (it counts titles not watched in a year, minus the ones you keep), and the whole tile opens the Stale tab. Coming up and Recently watched show the time as well as the day.
+- **Disk space**: click a drive (or its *Almost full* badge) to open the Library on the titles stored there, largest first.
+- The service chips at the top open each service's own site in a new tab.
+- **Recent requests** (Overseerr) lists the latest requests of any status with where each stands, and **Recently watched** (Tautulli) lists the latest plays, so the dashboard has something in every column.
+- **Pending requests** has **Approve** and **Decline** buttons. Each asks twice ("Sure?") before anything is sent to Overseerr.
+- Each widget only appears when a service that provides it is set up, refreshes at its own pace while the tab is on screen, and fails alone: if one service is down, that one card says so and the rest carry on. Both layouts read the same data, so flipping between them fetches nothing.
+
+**Discover** (needs Overseerr)
+- A **Discover** tab like Overseerr's: search for any movie or series, browse rows of *Trending*, *Popular*, and *Upcoming*, or browse by genre. What you already own is marked *In library*, and its card opens that title's library window right there on the Discover tab (not the request window).
+- Open a title for its overview, cast and rating, then **Request** it. For a series you choose the seasons: those already available or requested are shown and locked. The request is made through Overseerr, which sends it to Radarr or Sonarr exactly as a request made in Overseerr would. This is the only part of Discover that changes anything.
+
+**Stale content** (needs Tautulli or Plex)
+- A **Stale** tab listing titles nobody has watched for a while, biggest first, with how much space removing them would free. Choose how long counts as a while (3 months to 3 years, or any number of days), include or exclude never-watched and watched-before titles, filter by type and size, tick what you want, and delete with the same review window as the Library. Open a title for its details first if you want to check it.
+- **Keep:** to leave a title out of the list for good, click its shield icon (or tick several and use *Keep* in the bar, or use *Keep* in the title's window or its ... menu). Kept titles are listed under **Kept** at the top of the tab, with the date they were marked and a *Stop keeping* button, and a kept title shows a green *Kept* badge in its window. Keep only hides a title from Stale; it does not stop you deleting it elsewhere. The Library's filters have a *Keep* section (Kept / Not kept), and the Keep list is included in database backups and in exports.
+
 **Browse**
 - Poster library built from every Radarr and Sonarr instance you connect (1080p and 4K servers are merged into one title).
 - Tile, grid and list views, with paging (250 titles per page by default).
 - Search, plus multi-select filters for type, status, instance, drive/root folder, genre and **tags** from Radarr and Sonarr.
 - Sort by total size, size per episode, episode count, title, date added, year, **rating**, last watched or play count. Rating is one score per title from Radarr/Sonarr (a movie's IMDb or TMDB score, whichever has more votes; a show's Sonarr score), weighted by vote count so one perfect vote does not top the list, shown in the list view's Rating column and on tiles while sorted by it. Find what is eating your disks.
 - Size range filter and a running total for whatever the filters match.
-- Click a title for a details window styled like a request page: a backdrop header with an availability badge, the overview and tags, **ratings** (IMDb, TMDB, Rotten Tomatoes and Metacritic for movies from Radarr; TMDB and Rotten Tomatoes for shows from Overseerr, or Sonarr's single unnamed score when Overseerr is not set up), shown with their logos, status, release or air dates, runtime, language, network or studio, external links, and each instance's folder. For a show, every season is listed as an expandable bar with its episode count and whether it is available, partially available or missing.
+- Click a title for a details window styled like a request page: a backdrop header with an availability badge, the overview and tags, **ratings** (IMDb, TMDB, Rotten Tomatoes and Metacritic for movies from Radarr; TMDB and Rotten Tomatoes for shows from Overseerr, or Sonarr's single unnamed score when Overseerr is not set up), shown with their logos, status, release or air dates, runtime, language, network or studio, external links (IMDb, TMDB, TheTVDB), a **Trailer** button that plays the trailer in a pop-out player (with a *Watch on YouTube* link for trailers that cannot be embedded), and each instance's folder. For a show, every season is listed as an expandable bar with its episode count and whether it is available, partially available or missing.
 
 **Recommendations** (optional, needs Overseerr)
-- At the bottom of a title's window, a row of **Recommendations** and **Similar** titles from Overseerr (TMDB), like its own title pages. Each card shows its poster, rating and whether you already have it (*In library*, *Available*, *Partial*, *Requested*). A card for something you own opens it here; any other opens its TMDB page. *Show more* loads further pages.
+- At the bottom of a title's window, a row of **Recommendations** and **Similar** titles from Overseerr (TMDB), like its own title pages. Each card shows its poster, rating and whether you already have it (*In library*, *Available*, *Partial*, *Requested*). A card for something you own opens it here; any other opens its Discover window, with the details and a *Request* button. *Show more* loads further pages.
 
 **Plex actions from each title** (optional)
 - Hover a poster (or use the last column in the list view) and click the **...** button for a menu like Plex's own, without anything that plays: **Add to collection...**, **Add to playlist...**, **Mark as watched / unwatched**, **Refresh metadata** and **Analyze**, plus **Details** and **Delete...**.
@@ -62,6 +81,7 @@ It started with the part that is hardest to do by hand, **keeping the library ti
 - Per-step results afterwards, and a **History** tab recording every deletion and the space freed.
 
 **Make it yours**
+- **Works on a phone.** On a narrow screen the side menu becomes a tab bar along the bottom (the logo, which is Home, sits in the exact middle; Settings is the gear at the top of Home), windows fill the screen (the ... menu and the delete review slide up from the bottom), tables keep only their key columns, and the hover-only buttons on posters are always visible, since a touch screen cannot hover.
 - 12 color themes, 10 necktie logo styles, and 8 bundled fonts (no CDN, works offline).
 - Collapsible side navigation, and per-browser defaults for the delete window.
 
@@ -79,7 +99,7 @@ For each selected title, in this order:
 5. **Plex** (optional): rescan the movie and show libraries.
 6. Record the result in the database (shown on the History tab).
 
-Prowlarr can be added for a connection test, but the delete workflow does not use it.
+Prowlarr and Tdarr can be added for a connection test, but the delete workflow does not use them. Tdarr's flows are planned as a later feature; see [docs/tdarr-integration.md](docs/tdarr-integration.md).
 
 ### Deleting individual episodes
 
@@ -110,6 +130,7 @@ Other things to know:
 | qBittorrent | Recommended | Torrent data may keep using disk space |
 | Tautulli / Plex | Optional | No watch history filters; no Plex rescan |
 | Prowlarr | Optional | Nothing. Connection test only |
+| Tdarr | Optional | Nothing yet. Connection test only (see [docs/tdarr-integration.md](docs/tdarr-integration.md) for the plan) |
 
 ## Install
 
@@ -163,6 +184,7 @@ Where each service's credentials come from:
 | Overseerr | API key (Settings > General) |
 | qBittorrent | Web UI username and password |
 | Tautulli | API key (Settings > Web Interface) |
+| Tdarr | Nothing, unless you have turned on an API key in Tdarr; then that key |
 | Plex | A Plex token |
 
 ### Data and backups
@@ -207,7 +229,8 @@ The key comes from one of two places:
 | Services (names, URLs) | always | |
 | API keys and passwords | off | Turn this on to move to another install. The file then holds your keys in plain text, so keep it private |
 | Deletion history | on | |
-| Appearance and preferences | on | Theme, logo, font, delete defaults, view and page size from *this browser* |
+| Appearance and preferences | on | Theme, logo, font, delete defaults, view and page size, home and Stale settings from *this browser* |
+| Keep list and update settings | always | Your Keep marks, and how the keyword and Plex caches are kept up to date. Webhook tokens are not included; a new one is made when you switch a webhook on |
 
 **Import** shows what is in the file first, then lets you pick a mode:
 
@@ -252,7 +275,7 @@ A wrong key is refused with a clear message and nothing is changed. Leave the fi
 
 **What the server does to protect itself and your services**
 
-- **A Content-Security-Policy** lets the page load scripts, styles and fonts only from the app itself, and connect only to the app. Images may come from anywhere (posters come from the hosts Radarr and Sonarr name). Other headers: `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: same-origin`, cross-origin isolation headers, `Cache-Control: no-store` on every API response, and HSTS when it is served over HTTPS.
+- **A Content-Security-Policy** lets the page load scripts, styles and fonts only from the app itself, and connect only to the app. Images may come from anywhere (posters come from the hosts Radarr and Sonarr name), and the only page it will frame is YouTube's privacy-enhanced player (`youtube-nocookie.com`), for trailers. Other headers: `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: same-origin`, cross-origin isolation headers, `Cache-Control: no-store` on every API response, and HSTS when it is served over HTTPS.
 - **Your API keys never follow a redirect to another host.** `fetch` only strips the `Authorization` header across origins, so the `X-Api-Key`, Plex token and cookie headers would otherwise be forwarded to whatever a service redirects to. Same-host redirects are followed; any other redirect is refused with an explanation.
 - **Input is validated.** Services must be a known type with a plain `http://` or `https://` URL (no `file:`, `data:` or credentials in the URL). Delete and plan requests accept only well-formed title keys, and a delete request with no options does the least destructive thing.
 - **Request bodies are capped before sign-in** (100 KB); only an authenticated import may be large (20 MB). Errors are returned as short JSON, never stack traces.
@@ -278,7 +301,7 @@ API keys stay on the server and are never sent to the browser; the Settings page
 A small Express server holds your keys, talks to each service's API and does the delete steps. A React (Vite) frontend talks only to that server. This is also why the app cannot be a static site: browsers cannot call these APIs directly because of CORS, and your keys would sit in the page.
 
 ```
-Browser (React)  ->  /api  ->  Express  ->  Radarr / Sonarr / Overseerr / qBittorrent / Tautulli / Plex
+Browser (React)  ->  /api  ->  Express  ->  Radarr / Sonarr / Overseerr / qBittorrent / Tautulli / Plex / Tdarr
                                    |
                                    +-> data/mmm.db (SQLite)
 ```
@@ -325,9 +348,28 @@ No. Plex only reports plays for the account that owns the token. Use Tautulli fo
 - Edit Radarr and Sonarr tags from the library
 - Multiple users and roles
 
+## Adding widgets for a service
+
+Home is built from a registry in `server/widgets/`. One file per service (or group of services) lists the widgets it can show:
+
+```js
+export default {
+  type: 'tautulli', name: 'Tautulli',
+  widgets: [{
+    id: 'now-playing', title: 'Now playing', kind: 'list',   // how the browser draws it
+    requires: ['tautulli', 'plex'],                           // shown only when one of these is set up
+    refresh: 15,                                              // seconds: server cache time and polling interval
+    order: 20, control: { span: 2 }, media: 'chip',           // place in Dashboard (of 4 columns) and in Media
+    fetch: async () => ({ rows: [{ id, title, subtitle, progress }], chip: '2 streaming' }),
+  }],
+};
+```
+
+Add the file to the list in `server/widgets/index.js`. The kinds are `status`, `stat` (`{ value, sub }`), `list` (`{ rows, empty }`, where a row can carry `progress`, `badge`, `right`, `when` and `actions`) and `posters` (`{ items }`); a widget that reuses one needs no screen code. Whatever `fetch` returns came from another service, so cut it down with the helpers in `server/widgets/util.js`. A widget that can change something lists each change by name under `actions`; nothing else can be triggered, and the buttons for it ask twice.
+
 ## Credits and trademarks
 
-Service logos shown in the Settings page belong to their respective owners (Radarr, Sonarr, Prowlarr, Overseerr, qBittorrent, Plex, Tautulli), and so do the rating marks shown in a title's window (IMDb, TMDB, Rotten Tomatoes, Metacritic; the artwork comes from the CC0 [Simple Icons](https://simpleicons.org) set) and are used only to identify those services. This project is not affiliated with or endorsed by any of them.
+Service logos shown in the Settings page belong to their respective owners (Radarr, Sonarr, Prowlarr, Overseerr, qBittorrent, Plex, Tautulli, Tdarr), and so do the rating marks shown in a title's window (IMDb, TMDB, Rotten Tomatoes, Metacritic; the artwork comes from the CC0 [Simple Icons](https://simpleicons.org) set) and are used only to identify those services. This project is not affiliated with or endorsed by any of them.
 
 ## License
 

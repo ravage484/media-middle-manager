@@ -1,8 +1,8 @@
 {
   "name": "media-middle-manager",
   "private": true,
-  "version": "0.2.0",
-  "description": "One place to browse and manage your media stack: Radarr, Sonarr, Overseerr, qBittorrent, Tautulli and Plex.",
+  "version": "0.3.0",
+  "description": "One place to browse and manage your media stack: Radarr, Sonarr, Overseerr, qBittorrent, Tautulli, Plex and Tdarr.",
   "type": "module",
   "scripts": {
     "dev": "concurrently -k \"node --watch server/index.js\" \"vite\"",

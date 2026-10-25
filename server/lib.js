@@ -1,11 +1,13 @@
 import crypto from 'node:crypto';
 import { getServices, saveServices, getHistory, addHistory, replaceHistory } from './db.js';
+import { keepForExport, keepFromImport } from './keep.js';
+import { testTdarr } from './tdarr.js';
 
 export { getServices, saveServices, getHistory };
 export const resetLibraryCache = () => { cache.at = 0; }; // after services change underneath us (e.g. a restore)
 
 /* ---------- export / import of settings ---------- */
-const SERVICE_TYPES = ['radarr', 'sonarr', 'overseerr', 'prowlarr', 'qbittorrent', 'tautulli', 'plex'];
+const SERVICE_TYPES = ['radarr', 'sonarr', 'overseerr', 'prowlarr', 'qbittorrent', 'tautulli', 'plex', 'tdarr'];
 const str = (v, max) => (typeof v === 'string' ? v.slice(0, max) : '');
 const normUrl = (u) => u.trim().replace(/\/+$/, '').toLowerCase();
 
@@ -16,7 +18,7 @@ export function exportData({ secrets = false, history = true } = {}) {
   }));
   return {
     app: 'media-middle-manager', version: 1, exportedAt: new Date().toISOString(), includesSecrets: !!secrets,
-    services, ...(history ? { history: getHistory() } : {}),
+    services, ...(history ? { history: getHistory() } : {}), keep: keepForExport(),
   };
 }
 
@@ -52,7 +54,7 @@ export function importData(data, { mode = 'merge', history = true } = {}) {
   const incoming = data.services.map(cleanService);
   const current = getServices();
   const result = mode === 'replace' ? [] : [...current];
-  const stats = { mode, added: 0, updated: 0, removed: mode === 'replace' ? current.length : 0, historyAdded: 0 };
+  const stats = { mode, added: 0, updated: 0, removed: mode === 'replace' ? current.length : 0, historyAdded: 0, keepAdded: 0 };
 
   for (const s of incoming) {
     const old = current.find((x) => x.type === s.type && normUrl(x.url) === normUrl(s.url));
@@ -78,6 +80,7 @@ export function importData(data, { mode = 'merge', history = true } = {}) {
     stats.historyAdded = extra.length;
     replaceHistory([...base, ...extra].sort((a, b) => b.at.localeCompare(a.at)));
   }
+  stats.keepAdded = keepFromImport(data.keep, mode); // the Keep list is small and is yours, so it always comes along
   cache.at = 0; // library depends on the services
   return stats;
 }
@@ -110,10 +113,10 @@ async function request(url, init) {
   try { return text ? JSON.parse(text) : null; } catch { return text; }
 }
 
-// Radarr / Sonarr / Prowlarr / Overseerr (X-Api-Key) and Plex (X-Plex-Token)
+// Radarr / Sonarr / Prowlarr / Overseerr (X-Api-Key), Plex (X-Plex-Token) and Tdarr (x-api-key, optional on its side)
 export function api(svc, p, { method = 'GET', body } = {}) {
   const headers = { Accept: 'application/json' };
-  headers[svc.type === 'plex' ? 'X-Plex-Token' : 'X-Api-Key'] = svc.apiKey;
+  if (svc.type !== 'tdarr' || svc.apiKey) headers[svc.type === 'plex' ? 'X-Plex-Token' : 'X-Api-Key'] = svc.apiKey;
   if (body) headers['Content-Type'] = 'application/json';
   return request(base(svc) + p, { method, headers, body: body && JSON.stringify(body) });
 }
@@ -157,6 +160,7 @@ export async function testService(svc) {
     }
     case 'qbittorrent': return 'qBittorrent ' + (await qb(svc, '/api/v2/app/version'));
     case 'tautulli': { const l = await tautulli(svc, 'get_libraries'); return `Tautulli, ${l.length} libraries`; }
+    case 'tdarr': return testTdarr(svc);
     case 'plex': { const d = await api(svc, '/library/sections'); return `${d.MediaContainer.Directory?.length ?? 0} libraries`; }
     default: throw new Error('Unknown service type');
   }
@@ -229,7 +233,7 @@ export async function getLibrary(force = false) {
 /* ---------- watch history (Tautulli preferred, Plex as fallback) ---------- */
 const norm = (t) => (t || '').toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]/g, '');
 
-async function tautulli(svc, cmd, params = {}) {
+export async function tautulli(svc, cmd, params = {}) {
   const r = await request(`${base(svc)}/api/v2?${new URLSearchParams({ apikey: svc.apiKey, cmd, ...params })}`, {});
   if (r.response?.result !== 'success') throw new Error(r.response?.message || 'Tautulli error');
   return r.response.data;

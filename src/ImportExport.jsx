@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { api } from './api.js';
 
 // Per-browser preferences that travel with an export.
-const PREF_KEYS = ['appearance', 'deleteDefaults', 'view', 'sort', 'desc', 'pageSize', 'navCollapsed'];
+const PREF_KEYS = ['appearance', 'deleteDefaults', 'view', 'sort', 'desc', 'pageSize', 'navCollapsed', 'homeView', 'staleDays', 'staleLayout', 'staleNever', 'stalePlayed'];
 const readPrefs = () => {
   const out = {};
   try { for (const k of PREF_KEYS) { const v = localStorage.getItem(k); if (v !== null) out[k] = v; } } catch { /* ignore */ }
