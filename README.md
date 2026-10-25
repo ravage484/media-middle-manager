@@ -5,7 +5,7 @@
 <h1 align="center">Media Middle Manager</h1>
 
 <p align="center">
-  One place to browse and manage your whole media stack: your Radarr and Sonarr libraries, with Overseerr, qBittorrent, Tautulli and Plex alongside.
+  One place to browse and manage your whole media stack: your Radarr and Sonarr libraries, with Overseerr, qBittorrent, Tautulli, Plex and Tdarr alongside.
 </p>
 
 > [!WARNING]
@@ -48,10 +48,10 @@ It started with the part that is hardest to do by hand, **keeping the library ti
 - Search, plus multi-select filters for type, status, instance, drive/root folder, genre and **tags** from Radarr and Sonarr.
 - Sort by total size, size per episode, episode count, title, date added, year, **rating**, last watched or play count. Rating is one score per title from Radarr/Sonarr (a movie's IMDb or TMDB score, whichever has more votes; a show's Sonarr score), weighted by vote count so one perfect vote does not top the list, shown in the list view's Rating column and on tiles while sorted by it. Find what is eating your disks.
 - Size range filter and a running total for whatever the filters match.
-- Click a title for a details window styled like a request page: a backdrop header with an availability badge, the overview and tags, **ratings** (IMDb, TMDB, Rotten Tomatoes and Metacritic for movies from Radarr; TMDB and Rotten Tomatoes for shows from Overseerr, or Sonarr's single unnamed score when Overseerr is not set up), shown with their logos, status, release or air dates, runtime, language, network or studio, external links, and each instance's folder. For a show, every season is listed as an expandable bar with its episode count and whether it is available, partially available or missing.
+- Click a title for a details window styled like a request page: a backdrop header with an availability badge, the overview and tags, **ratings** (IMDb, TMDB, Rotten Tomatoes and Metacritic for movies from Radarr; TMDB and Rotten Tomatoes for shows from Overseerr, or Sonarr's single unnamed score when Overseerr is not set up), shown with their logos, status, release or air dates, runtime, language, network or studio, external links (IMDb, TMDB, TheTVDB), a **Trailer** button that plays the trailer in a pop-out player (with a *Watch on YouTube* link for trailers that cannot be embedded), and each instance's folder. For a show, every season is listed as an expandable bar with its episode count and whether it is available, partially available or missing.
 
 **Recommendations** (optional, needs Overseerr)
-- At the bottom of a title's window, a row of **Recommendations** and **Similar** titles from Overseerr (TMDB), like its own title pages. Each card shows its poster, rating and whether you already have it (*In library*, *Available*, *Partial*, *Requested*). A card for something you own opens it here; any other opens its TMDB page. *Show more* loads further pages.
+- At the bottom of a title's window, a row of **Recommendations** and **Similar** titles from Overseerr (TMDB), like its own title pages. Each card shows its poster, rating and whether you already have it (*In library*, *Available*, *Partial*, *Requested*). A card for something you own opens it here; any other opens its Discover window, with the details and a *Request* button. *Show more* loads further pages.
 
 **Plex actions from each title** (optional)
 - Hover a poster (or use the last column in the list view) and click the **...** button for a menu like Plex's own, without anything that plays: **Add to collection...**, **Add to playlist...**, **Mark as watched / unwatched**, **Refresh metadata** and **Analyze**, plus **Details** and **Delete...**.
@@ -99,7 +99,7 @@ For each selected title, in this order:
 5. **Plex** (optional): rescan the movie and show libraries.
 6. Record the result in the database (shown on the History tab).
 
-Prowlarr can be added for a connection test, but the delete workflow does not use it.
+Prowlarr and Tdarr can be added for a connection test, but the delete workflow does not use them. Tdarr's flows are planned as a later feature; see [docs/tdarr-integration.md](docs/tdarr-integration.md).
 
 ### Deleting individual episodes
 
@@ -130,6 +130,7 @@ Other things to know:
 | qBittorrent | Recommended | Torrent data may keep using disk space |
 | Tautulli / Plex | Optional | No watch history filters; no Plex rescan |
 | Prowlarr | Optional | Nothing. Connection test only |
+| Tdarr | Optional | Nothing yet. Connection test only (see [docs/tdarr-integration.md](docs/tdarr-integration.md) for the plan) |
 
 ## Install
 
@@ -183,6 +184,7 @@ Where each service's credentials come from:
 | Overseerr | API key (Settings > General) |
 | qBittorrent | Web UI username and password |
 | Tautulli | API key (Settings > Web Interface) |
+| Tdarr | Nothing, unless you have turned on an API key in Tdarr; then that key |
 | Plex | A Plex token |
 
 ### Data and backups
@@ -227,7 +229,8 @@ The key comes from one of two places:
 | Services (names, URLs) | always | |
 | API keys and passwords | off | Turn this on to move to another install. The file then holds your keys in plain text, so keep it private |
 | Deletion history | on | |
-| Appearance and preferences | on | Theme, logo, font, delete defaults, view and page size from *this browser* |
+| Appearance and preferences | on | Theme, logo, font, delete defaults, view and page size, home and Stale settings from *this browser* |
+| Keep list and update settings | always | Your Keep marks, and how the keyword and Plex caches are kept up to date. Webhook tokens are not included; a new one is made when you switch a webhook on |
 
 **Import** shows what is in the file first, then lets you pick a mode:
 
@@ -272,7 +275,7 @@ A wrong key is refused with a clear message and nothing is changed. Leave the fi
 
 **What the server does to protect itself and your services**
 
-- **A Content-Security-Policy** lets the page load scripts, styles and fonts only from the app itself, and connect only to the app. Images may come from anywhere (posters come from the hosts Radarr and Sonarr name). Other headers: `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: same-origin`, cross-origin isolation headers, `Cache-Control: no-store` on every API response, and HSTS when it is served over HTTPS.
+- **A Content-Security-Policy** lets the page load scripts, styles and fonts only from the app itself, and connect only to the app. Images may come from anywhere (posters come from the hosts Radarr and Sonarr name), and the only page it will frame is YouTube's privacy-enhanced player (`youtube-nocookie.com`), for trailers. Other headers: `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: same-origin`, cross-origin isolation headers, `Cache-Control: no-store` on every API response, and HSTS when it is served over HTTPS.
 - **Your API keys never follow a redirect to another host.** `fetch` only strips the `Authorization` header across origins, so the `X-Api-Key`, Plex token and cookie headers would otherwise be forwarded to whatever a service redirects to. Same-host redirects are followed; any other redirect is refused with an explanation.
 - **Input is validated.** Services must be a known type with a plain `http://` or `https://` URL (no `file:`, `data:` or credentials in the URL). Delete and plan requests accept only well-formed title keys, and a delete request with no options does the least destructive thing.
 - **Request bodies are capped before sign-in** (100 KB); only an authenticated import may be large (20 MB). Errors are returned as short JSON, never stack traces.
@@ -298,7 +301,7 @@ API keys stay on the server and are never sent to the browser; the Settings page
 A small Express server holds your keys, talks to each service's API and does the delete steps. A React (Vite) frontend talks only to that server. This is also why the app cannot be a static site: browsers cannot call these APIs directly because of CORS, and your keys would sit in the page.
 
 ```
-Browser (React)  ->  /api  ->  Express  ->  Radarr / Sonarr / Overseerr / qBittorrent / Tautulli / Plex
+Browser (React)  ->  /api  ->  Express  ->  Radarr / Sonarr / Overseerr / qBittorrent / Tautulli / Plex / Tdarr
                                    |
                                    +-> data/mmm.db (SQLite)
 ```

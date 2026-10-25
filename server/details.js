@@ -40,7 +40,6 @@ function normalize(isShow, o) {
   if (imdb) links.push({ label: 'IMDb', url: `https://www.imdb.com/title/${imdb}/` });
   if (tmdb) links.push({ label: 'TMDB', url: `https://www.themoviedb.org/${isShow ? 'tv' : 'movie'}/${tmdb}` });
   if (tvdb && isShow) links.push({ label: 'TheTVDB', url: `https://thetvdb.com/dereferrer/series/${tvdb}` });
-  if (yt) links.push({ label: 'Trailer', url: `https://www.youtube.com/watch?v=${yt}` });
   const seasons = Array.isArray(o.seasons) ? o.seasons.filter((s) => s.seasonNumber > 0) : [];
   return {
     backdrop: pick('fanart') || pick('banner'),
@@ -62,6 +61,7 @@ function normalize(isShow, o) {
     quality: !isShow ? text(o.movieFile?.quality?.quality?.name, 40) : null,
     collection: !isShow ? text(o.collection?.title ?? o.collection?.name, 80) : null,
     links,
+    trailerId: yt, // played in the app; the id was checked above
   };
 }
 

@@ -111,7 +111,7 @@ export default function Services() {
                 <div className="sbody">
                   <div className="sinfo">
                     <b>{s.name}</b>
-                    <div><span className="k">Address</span> {s.url}</div>
+                    <div><span className="k">Address</span> <a className="slink" href={s.url} target="_blank" rel="noopener noreferrer">{s.url}</a></div>
                     <div className="sstat">
                       {status[s.id] ? <><i className={`dot ${status[s.id].state}`} />{status[s.id].detail}</> : <span className="dim">Not tested</span>}
                     </div>

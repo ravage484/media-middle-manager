@@ -23,9 +23,10 @@ export default function DiscoverTitle({ type, tmdbId, onClose, onOpenLibrary, on
   }).catch((e) => setErr(e.message));
   useEffect(() => { load(true); }, [type, tmdbId]);
   useEffect(() => {
-    const esc = (e) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', esc);
-    return () => window.removeEventListener('keydown', esc);
+    // capture phase and stopped here, so Escape closes this window only, not the title window it may be open over
+    const esc = (e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } };
+    window.addEventListener('keydown', esc, true);
+    return () => window.removeEventListener('keydown', esc, true);
   }, [onClose]);
 
   const request = async () => {

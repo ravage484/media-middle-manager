@@ -11,7 +11,7 @@ import { keepMap, setKeep } from './keep.js';
 import { listWidgets, widgetData, widgetAction, resetWidgetCache } from './widgets/index.js';
 import { browse, search as discoverSearch, genres as discoverGenres, titleDetails, requestTitle } from './discover.js';
 import { plexPayload, syncPlexData, refreshEntry, acceptPlexHook, plexTick } from './plexcache.js';
-import { keywordsPayload, startSync, stopSync, setAuto, syncStatus, tick, acceptHook, hookToken } from './keywords.js';
+import { keywordsPayload, startSync, stopSync, setAuto, getAuto, syncStatus, tick, acceptHook, hookToken } from './keywords.js';
 import { snapshot, restoreFrom, DATA, securityInfo } from './db.js';
 import { authRoutes, requireAuth, sameOrigin, bootstrapAdmin, AUTH_DISABLED } from './auth.js';
 
@@ -24,7 +24,7 @@ if (process.env.MMM_TRUST_PROXY === 'true') app.set('trust proxy', true); // beh
 // Everything the app loads comes from itself, except poster images, which are fetched from the image hosts Radarr/Sonarr name.
 const CSP = [
   "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline'", "img-src 'self' data: https: http:",
-  "font-src 'self' data:", "connect-src 'self'", "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'none'",
+  "font-src 'self' data:", "connect-src 'self'", 'frame-src https://www.youtube-nocookie.com', "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'none'",
 ].join('; ');
 app.use((req, res, next) => {
   res.setHeader('Content-Security-Policy', CSP);
@@ -206,12 +206,22 @@ app.post('/api/episodes/delete', wrap(async (req, res) => {
   res.json(await executeEpisodes(key, selection, { torrents: o.torrents === true, plex: o.plex === true })); // files are the point; nothing else is on by default
 }));
 
+// App-wide settings that live in the database rather than in services: how the keyword and Plex caches are kept up to date.
+// Webhook tokens are left out on purpose (they are secrets; a new one is made when the webhook is switched on).
 app.get('/api/export', wrap((req, res) => {
-  res.json(exportData({ secrets: req.query.secrets === '1', history: req.query.history !== '0' }));
+  res.json({ ...exportData({ secrets: req.query.secrets === '1', history: req.query.history !== '0' }), settings: { autoUpdate: getAuto() } });
 }));
 app.post('/api/import', bigJson, wrap((req, res) => {
-  try { res.json(importData(asObject(req.body).data, asObject(asObject(req.body).options))); }
-  catch (e) { res.status(400).json({ error: e.message }); }
+  try {
+    const body = asObject(req.body);
+    const stats = importData(body.data, asObject(body.options));
+    const auto = asObject(asObject(body.data).settings).autoUpdate;
+    if (auto !== undefined) {
+      try { setAuto(auto); stats.settingsApplied = true; } catch { stats.settingsApplied = false; } // a bad value in the file never undoes the import
+      tick(); plexTick();
+    }
+    res.json(stats);
+  } catch (e) { res.status(400).json({ error: e.message }); }
 }));
 
 app.get('/api/security', (req, res) => res.json(securityInfo()));

@@ -12,7 +12,7 @@ Manage, from Media Middle Manager, the processing a title goes through (audio/vi
 - **Queues / staged files**: transcode queue and health-check queue, with per-file status (queued, processing, success, error).
 - API on the server port (default **8265**). An API key is optional in Tdarr and is sent as `x-api-key`. Settings live in database collections read through `POST /api/v2/cruddb` (`LibrarySettingsJSONDB`, `FlowsJSONDB`); there are also `/api/v2/status` and `/api/v2/get-nodes`.
 
-> The endpoint names and payload shapes above come from Tdarr's public API as documented; **verify them against a live instance** before building phases 2 and 3 (`server/tdarr.js` is the one place to adjust).
+> The calls used by `server/tdarr.js` (`/api/v2/status`, `cruddb` getAll on `LibrarySettingsJSONDB` and `FlowsJSONDB`, `/api/v2/get-nodes`) were checked against a live Tdarr 3.01.00 server with no API key set; the fields read (`_id`, `name`, `folder`, `flowId`, `nodeName`, `nodePaused`, `flowPlugins`) are all present. Queue and file-status endpoints (phase 2) have not been checked yet, and the `x-api-key` path is untested because that instance has no key.
 
 ## How it fits the app
 

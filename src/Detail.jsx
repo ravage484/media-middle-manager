@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api, fmtBytes, watchLabel } from './api.js';
 import Poster from './Poster.jsx';
 import EpisodePicker from './EpisodePicker.jsx';
 import EpisodeDeleteDialog from './EpisodeDeleteDialog.jsx';
 import Icon from './Icon.jsx';
 import Recommendations from './Recommendations.jsx';
+import TrailerDialog from './TrailerDialog.jsx';
 import { useKeep } from './keep.js';
 
 // Dates from the server are "2011-10-25" (no time zone); added dates are full timestamps.
@@ -30,6 +32,7 @@ export default function Detail({ item, hasWatch, hasPlex, hasOverseerr, onClose,
   const [d, setD] = useState(null); // backdrop, ratings, dates, links: fetched for this title when the window opens
   const [epDelete, setEpDelete] = useState(null); // selection being reviewed, if any
   const [refresh, setRefresh] = useState(0);
+  const [trailer, setTrailer] = useState(false);
   const isShow = item.type === 'show';
   const keep = useKeep();
   const kept = keep.isKept(item.key);
@@ -39,15 +42,15 @@ export default function Detail({ item, hasWatch, hasPlex, hasOverseerr, onClose,
   useEffect(() => { scroller.current?.scrollTo({ top: 0 }); }, [item.key]); // opening a recommendation starts at the top
 
   useEffect(() => {
-    setD(null);
+    setD(null); setTrailer(false);
     api.details(item.key).then(setD).catch(() => setD({ ratings: [], links: [] }));
   }, [item.key, refresh]);
 
   useEffect(() => {
-    const esc = (e) => e.key === 'Escape' && !epDelete && onClose(); // Escape closes the top window only
+    const esc = (e) => e.key === 'Escape' && !epDelete && !trailer && onClose(); // Escape closes the top window only
     window.addEventListener('keydown', esc);
     return () => window.removeEventListener('keydown', esc);
-  }, [onClose, epDelete]);
+  }, [onClose, epDelete, trailer]);
 
   // Availability badge, like the one on a request page: all, some or none of it is on disk.
   let avail = item.hasFile ? ['On disk', 'ok'] : ['Not on disk', 'dim'];
@@ -148,8 +151,9 @@ export default function Detail({ item, hasWatch, hasPlex, hasOverseerr, onClose,
                     {item.instances.map((n) => <span key={n.serviceId + n.arrId} className="path">{n.serviceName}{isShow ? ` · ${fmtBytes(n.size)}` : ''}</span>)}
                   </Row>
                 </dl>
-                {d?.links?.length > 0 && (
+                {(d?.links?.length > 0 || d?.trailerId) && (
                   <div className="xlinks">
+                    {d.trailerId && <button onClick={() => setTrailer(true)}>Trailer</button>}
                     {d.links.map((l) => <a key={l.url} href={l.url} target="_blank" rel="noopener noreferrer">{l.label}</a>)}
                   </div>
                 )}
@@ -165,6 +169,7 @@ export default function Detail({ item, hasWatch, hasPlex, hasOverseerr, onClose,
           onClose={(changed) => { setEpDelete(null); if (changed) { setRefresh((n) => n + 1); onChanged?.(); } }}
         />
       )}
+      {trailer && d?.trailerId && createPortal(<TrailerDialog videoId={d.trailerId} title={item.title} onClose={() => setTrailer(false)} />, document.body)}
     </div>
   );
 }

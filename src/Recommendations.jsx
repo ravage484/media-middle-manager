@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from './api.js';
 import Carousel from './Carousel.jsx';
 import TitleCard from './TitleCard.jsx';
+import DiscoverTitle from './DiscoverTitle.jsx';
 
-// What Overseerr (TMDB) suggests after this title. A card for something you already have opens it here; any other opens its TMDB page.
+// What Overseerr (TMDB) suggests after this title. A card for something you already have opens it here; any other opens its Discover window, where it can be requested.
 const TABS = [['recommendations', 'Recommendations'], ['similar', 'Similar']];
 
 export default function Recommendations({ item, onOpen }) {
@@ -14,6 +16,7 @@ export default function Recommendations({ item, onOpen }) {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
   const [onlyIn, setOnlyIn] = useState(false); // show only titles you already have
+  const [lookup, setLookup] = useState(null); // { type, tmdbId } of a suggestion you do not have, shown in the Discover window
 
   // Flipping between Recommendations and Similar keeps the old cards (dimmed) until the new ones arrive, so the section does not
   // collapse and refill. A slow answer to an earlier request is ignored if a newer one has been made since.
@@ -58,10 +61,14 @@ export default function Recommendations({ item, onOpen }) {
       <Carousel resetKey={fresh} stale={loading && list.length > 0}>
         {shown.map((r) => (r.inLibrary
           ? <TitleCard key={r.type + r.tmdbId} r={r} title="Open it here" onOpen={() => onOpen?.(r.inLibrary)} />
-          : <TitleCard key={r.type + r.tmdbId} r={r} title="Open on TMDB" href={`https://www.themoviedb.org/${r.type === 'movie' ? 'movie' : 'tv'}/${r.tmdbId}`} />))}
+          : <TitleCard key={r.type + r.tmdbId} r={r} title="Open details and request" onOpen={() => setLookup({ type: r.type, tmdbId: r.tmdbId })} />))}
         {more && <button className="rcard rmore" disabled={loading} onClick={() => load(kind, page + 1, true)}>{loading ? 'Loading…' : 'Show more'}</button>}
         {loading && list.length === 0 && !err && <span className="dim">Asking Overseerr…</span>}
       </Carousel>
+      {lookup && createPortal( // at the page level: inside this title's window it would be painted underneath it
+        <DiscoverTitle type={lookup.type} tmdbId={lookup.tmdbId} onClose={() => setLookup(null)} onOpenLibrary={(key) => { setLookup(null); onOpen?.(key); }} />,
+        document.body,
+      )}
     </section>
   );
 }

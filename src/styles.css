@@ -126,6 +126,8 @@ table.list { width: 100%; border-collapse: collapse; }
 .scards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
 .scard { background: var(--panel); border: 1px solid var(--panel2); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
 .sbody { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px; flex: 1; }
+.slink { color: inherit; text-decoration: underline dotted; text-underline-offset: 3px; overflow-wrap: anywhere; }
+.slink:hover { color: var(--accent); text-decoration-style: solid; }
 .sinfo { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .sinfo b { font-size: 16px; }
 .sinfo div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -148,6 +150,9 @@ table.list { width: 100%; border-collapse: collapse; }
 .logincard .primary { padding: 10px; }
 .form input[type=file] { padding: 8px; }
 .overlay.stacked { z-index: 30; }
+.dialog.trailer { width: min(960px, 100%); padding: 12px; }
+.trailerframe { position: relative; aspect-ratio: 16 / 9; background: #000; border-radius: 8px; overflow: hidden; }
+.trailerframe iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 .eppicker { margin-top: 4px; }
 .epinst h5 { margin: 14px 0 8px; font-size: 14px; color: var(--dim); }
 .season { border: 1px solid var(--panel2); border-radius: 10px; margin-bottom: 8px; overflow: hidden; background: var(--panel); }
@@ -218,8 +223,9 @@ button.chip { font: inherit; font-size: 13px; color: inherit; cursor: pointer; }
 .irow dd { margin: 0; text-align: right; color: var(--dim); min-width: 0; overflow-wrap: anywhere; }
 .irow .path { display: block; }
 .xlinks { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--panel2); }
-.xlinks a { color: var(--text); background: var(--panel2); padding: 4px 12px; border-radius: 99px; font-size: 13px; text-decoration: none; }
-.xlinks a:hover { background: var(--accent); color: var(--on-accent); }
+.xlinks a, .xlinks button { color: var(--text); background: var(--panel2); padding: 4px 12px; border-radius: 99px; font-size: 13px; text-decoration: none; }
+.xlinks button { border: 0; cursor: pointer; }
+.xlinks a:hover, .xlinks button:hover { background: var(--accent); color: var(--on-accent); }
 .filelist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .filelist li { background: var(--panel); border: 1px solid var(--panel2); border-radius: 8px; padding: 10px 14px; }
 @media (max-width: 900px) {
