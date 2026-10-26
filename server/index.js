@@ -2,7 +2,7 @@ import express from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
-import { getServices, saveServices, getHistory, getLibrary, plan, execute, testService, exportData, importData, resetLibraryCache, cleanService } from './lib.js';
+import { getServices, saveServices, getHistory, getLibrary, warmLibrary, plan, execute, testService, exportData, importData, resetLibraryCache, cleanService } from './lib.js';
 import { listEpisodes, planEpisodes, executeEpisodes } from './episodes.js';
 import { getDetails } from './details.js';
 import { plexAct, resetPlexIndex } from './plex.js';
@@ -277,6 +277,7 @@ await bootstrapAdmin();
 const port = process.env.PORT || 3001;
 const host = process.env.MMM_HOST || undefined; // e.g. 127.0.0.1 when a reverse proxy on the same machine is the only client
 app.listen(port, host, () => {
+  warmLibrary(); // so the first page load after a start finds the library ready
   console.log(`Media Middle Manager API on http://${host || 'localhost'}:${port}`);
   if (AUTH_DISABLED) console.warn('WARNING: authentication is disabled (MMM_AUTH_DISABLED=true). Anyone who can reach this port can delete media.');
 });

@@ -129,14 +129,16 @@ async function qbLogin(svc) {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', Referer: base(svc) },
     body: new URLSearchParams({ username: svc.username || '', password: svc.password || '' }),
   });
-  const cookie = r.headers.get('set-cookie')?.split(';')[0];
-  if ((await r.text()).trim() !== 'Ok.' || !cookie) throw new Error('qBittorrent login failed');
+  // Subnet-whitelisted clients get a 204 with no body and no cookie, so judge by status, not body
+  const cookie = r.headers.get('set-cookie')?.split(';')[0] ?? '';
+  if (!r.ok || (await r.text()).trim() === 'Fails.') throw new Error('qBittorrent login failed');
   cookies.set(svc.id, cookie);
   return cookie;
 }
 export async function qb(svc, p, { method = 'GET', form } = {}, retry = true) {
   const cookie = cookies.get(svc.id) ?? (await qbLogin(svc));
-  const headers = { Cookie: cookie, Referer: base(svc) };
+  const headers = { Referer: base(svc) };
+  if (cookie) headers.Cookie = cookie;
   if (form) headers['Content-Type'] = 'application/x-www-form-urlencoded';
   const res = await safeFetch(base(svc) + p, { method, headers, body: form && new URLSearchParams(form) });
   if (res.status === 403 && retry) { cookies.delete(svc.id); return qb(svc, p, { method, form }, false); }
@@ -186,8 +188,20 @@ function ratingOf(m, movie) {
   return valid(r.rottenTomatoes?.value, 10) ? round1(r.rottenTomatoes.value / 10) : valid(r.metacritic?.value, 10) ? round1(r.metacritic.value / 10) : null;
 }
 
+// One rebuild at a time, shared by every caller. Once there is a library, a stale one is answered at once while a rebuild runs in the
+// background, so a page load never waits on Radarr/Sonarr/Tautulli. at === 0 means "changed underneath us": that waits for fresh data.
+let building = null;
+const rebuild = () => (building ??= buildLibrary().finally(() => { building = null; }));
 export async function getLibrary(force = false) {
-  if (!force && Date.now() - cache.at < 60000) return cache;
+  const age = Date.now() - cache.at;
+  if (!force && cache.at && age < 60000) return cache;
+  if (!force && cache.at) { rebuild().catch(() => {}); return cache; }
+  if (force && building) await building.catch(() => {}); // a rebuild already under way may predate what the caller just changed
+  return rebuild();
+}
+export const warmLibrary = () => getLibrary(true).catch(() => {});
+
+async function buildLibrary() {
   const svcs = getServices().filter((s) => s.type === 'radarr' || s.type === 'sonarr');
   const map = new Map();
   const errors = [];
