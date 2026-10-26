@@ -16,6 +16,12 @@ var_version="${var_version:-13}"
 var_arm64="${var_arm64:-no}"
 var_unprivileged="${var_unprivileged:-1}"
 
+# The engine only knows banners from its own repo and otherwise draws "Community Scripts"; this is ours instead.
+_CS_FALLBACK_HEADER=' __  __ __  __ __  __
+|  \/  |  \/  |  \/  |
+| |\/| | |\/| | |\/| |
+|_|  |_|_|  |_|_|  |_|'
+
 header_info "$APP"
 variables
 color
