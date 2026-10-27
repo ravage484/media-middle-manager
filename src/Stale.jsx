@@ -1,19 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, fmtBytes } from './api.js';
-import { stale, lastUse, DAY } from './stale.js';
+import { stale, lastUse, staleness, DAY } from './stale.js';
 import DeleteDialog from './DeleteDialog.jsx';
 import Detail from './Detail.jsx';
 import Poster from './Poster.jsx';
 import Icon from './Icon.jsx';
+import SortTh, { sortClick } from './SortTh.jsx';
 import { useKeep } from './keep.js';
 
 // Titles nobody has watched for a while, biggest first: what is worth removing to get disk space back.
 const PRESETS = [[90, '3 months'], [180, '6 months'], [365, '1 year'], [730, '2 years'], [1095, '3 years']];
 const SORTS = {
   size: ['Size', (a, b) => a.size - b.size, ['Largest first', 'Smallest first']],
+  scale: ['Stale scale', (a, b) => staleness(a).score - staleness(b).score, ['Stalest first', 'Freshest first']],
   idle: ['Longest unwatched', (a, b) => lastUse(b) - lastUse(a), ['Longest first', 'Shortest first']],
   added: ['Date added', (a, b) => (a.added || '').localeCompare(b.added || ''), ['Newest first', 'Oldest first']],
   title: ['Title', (a, b) => a.title.localeCompare(b.title), ['Z to A', 'A to Z']],
+  type: ['Type', (a, b) => a.type.localeCompare(b.type), ['Shows first', 'Movies first']],
 };
 const PAGE = 200;
 const store = (k, d) => { try { return localStorage.getItem(k) || d; } catch { return d; } };
@@ -22,6 +25,20 @@ const ago = (ms) => {
   const d = Math.floor((Date.now() - ms) / DAY);
   return d < 60 ? `${d} days ago` : d < 730 ? `${Math.round(d / 30)} months ago` : `${(d / 365).toFixed(1)} years ago`;
 };
+
+const SCALE_HINT = 'How long unwatched, against how long in your library. 0 is fresh, 100 is a fossil.';
+
+// A title's place on the stale scale: a bar, green to red, with its band. The tooltip says how it was worked out.
+function Meter({ it }) {
+  const s = staleness(it);
+  const dur = (d) => (d < 60 ? `${d} days` : d < 730 ? `${Math.round(d / 30)} months` : `${(d / 365).toFixed(1)} years`);
+  return (
+    <span className="smeter" title={`${s.label} (${s.score}/100). ${s.never ? 'Never watched' : `Last watched ${dur(s.idle)} ago`}; in your library for ${dur(s.age)}.`}>
+      <i><b style={{ width: `${Math.max(4, s.score)}%`, background: `hsl(${s.hue} 70% 45%)` }} /></i>
+      <em style={{ color: `hsl(${s.hue} 70% 55%)` }}>{s.label}</em>
+    </span>
+  );
+}
 
 // The heading a title is filed under in the tile and grid views: how long since it was last watched (or "Never watched").
 // rank orders the headings, longest unwatched first; the label is rounded down to the largest whole unit.
@@ -110,6 +127,8 @@ export default function Stale() {
   };
   const onRow = (it, idx) => (e) => (selected.size > 0 || e.shiftKey || e.ctrlKey || e.metaKey ? toggle(idx, e) : setDetail(it.key));
   const onCheck = (idx) => (e) => { e.stopPropagation(); toggle(idx, e); };
+  const sortBy = (k) => sortClick(sort, desc, k, (s, d) => { setSort(s); setDesc(d); });
+  const th = (k, label, className, hint) => <SortTh k={k} label={label} sort={sort} desc={desc} onSort={sortBy} className={className} hint={hint} />;
   const flipType = (t) => setTypes((s) => { const n = new Set(s); n.has(t) ? n.delete(t) : n.add(t); return n; });
   const chips = [
     { id: 'days', label: 'Not watched in', text: `${days} days` },
@@ -148,6 +167,7 @@ export default function Stale() {
         <div className="meta">
           <b>{it.title}</b><small>{it.year} · {fmtBytes(it.size)}</small>
           <small>{sinceText(it)}</small>
+          {!kept && <Meter it={it} />}
         </div>
       </div>
     );
@@ -156,7 +176,7 @@ export default function Stale() {
     if (layout === 'list') {
       return (
         <table className="list">
-          <thead><tr><th /><th /><th>Title</th><th className="hm">Type</th><th>Size</th><th>{kept ? 'Kept since' : 'Last watched'}</th>{!kept && <th className="hm">Added</th>}<th /></tr></thead>
+          <thead><tr><th /><th />{kept ? <><th>Title</th><th className="hm">Type</th><th>Size</th><th>Kept since</th></> : <>{th('title', 'Title')}{th('type', 'Type', 'hm')}{th('size', 'Size')}{th('idle', 'Last watched')}{th('added', 'Added', 'hm')}{th('scale', 'Stale scale', 'hm', SCALE_HINT)}</>}<th /></tr></thead>
           <tbody>
             {shown.map((it, idx) => (
               <tr key={it.key} className={selected.has(it.key) ? 'sel' : ''} onClick={onRow(it, idx)}>
@@ -168,6 +188,7 @@ export default function Stale() {
                 <td>{kept ? when(Date.parse(keep.map[it.key]))
                   : it.watch.plays && it.watch.last ? <>{when(lastUse(it))} <small className="dim">{ago(lastUse(it))}</small></> : <span className="dim">Never</span>}</td>
                 {!kept && <td className="hm">{when(Date.parse(it.added))} <small className="dim">{it.added ? ago(Date.parse(it.added)) : ''}</small></td>}
+                {!kept && <td className="hm"><Meter it={it} /></td>}
                 <td className="rowbtns">{rowActions(it)}</td>
               </tr>
             ))}
@@ -215,7 +236,11 @@ export default function Stale() {
       </div>
 
       <div className="toolbar">
-        <input className="search" placeholder="Search these titles…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <div className="dsearch toolbarsearch">
+          <Icon name="search" size={18} />
+          <input placeholder="Search these titles…" value={q} onChange={(e) => setQ(e.target.value)} autoComplete="off" aria-label="Search these titles" />
+          {q && <button className="icon" aria-label="Clear search" onClick={() => setQ('')}><Icon name="x" size={16} /></button>}
+        </div>
         {view === 'stale' && (
           <>
             <select value={sort} onChange={(e) => setSort(e.target.value)}>

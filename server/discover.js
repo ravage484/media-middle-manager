@@ -1,6 +1,6 @@
 import { getLibrary, api } from './lib.js';
 import { overseerrService } from './keywords.js';
-import { shapeResults, libraryIndex, withLibrary, text, num, image, id, mediaStatus } from './tmdb.js';
+import { shapeResults, shapeCast, shapePeople, libraryIndex, inLibraryOf, withLibrary, text, num, image, id, mediaStatus } from './tmdb.js';
 
 /*
  * Discover: browse and search what exists (not just what you own) through Overseerr, and ask for it. Lists and details come from
@@ -45,10 +45,10 @@ const SECTIONS = {
 async function listFrom(path, page, ttl) {
   const d = await cached(path, ttl, async () => {
     const r = await api(svc(), path);
-    return { totalPages: Number.isInteger(r?.totalPages) ? r.totalPages : 1, results: shapeResults(r?.results) };
+    return { totalPages: Number.isInteger(r?.totalPages) ? r.totalPages : 1, results: shapeResults(r?.results), people: shapePeople(r?.results) };
   });
   const { items } = await getLibrary(false);
-  return { page, hasMore: page < Math.min(d.totalPages, 20), results: withLibrary(d.results, libraryIndex(items)) };
+  return { page, hasMore: page < Math.min(d.totalPages, 20), results: withLibrary(d.results, libraryIndex(items)), ...(page === 1 && d.people.length ? { people: d.people } : {}) };
 }
 
 // section: one of SECTIONS, or "genre" with a type and a genre id.
@@ -81,6 +81,16 @@ export async function genres(type) {
   });
 }
 
+// Is a 4K Radarr (movies) or Sonarr (shows) set up in Overseerr? Only then is "Request 4K" offered.
+async function has4k(k) {
+  return cached(`4k:${k}`, 10 * 60000, async () => {
+    try {
+      const r = await api(svc(), `/api/v1/settings/${k === 'movie' ? 'radarr' : 'sonarr'}`);
+      return Array.isArray(r) && r.some((x) => x?.is4k === true);
+    } catch { return false; } // not an admin key, or older Overseerr: just don't offer it
+  });
+}
+
 /* ---------- one title ---------- */
 export async function titleDetails(type, tmdbId) {
   const k = kind(type);
@@ -90,36 +100,86 @@ export async function titleDetails(type, tmdbId) {
   const d = await cached(`title:${k}:${tid}`, 2 * 60000, () => api(s, `/api/v1/${k}/${tid}`));
   const { items } = await getLibrary(false);
   const info = d?.mediaInfo;
-  const bySeason = new Map((Array.isArray(info?.seasons) ? info.seasons : []).map((x) => [x?.seasonNumber, mediaStatus(x)]));
-  // seasons somebody has already asked for (waiting for approval, or approved)
-  const asked = new Set();
+  const seasonInfo = Array.isArray(info?.seasons) ? info.seasons : [];
+  const bySeason = new Map(seasonInfo.map((x) => [x?.seasonNumber, mediaStatus({ status: x?.status })]));
+  const bySeason4k = new Map(seasonInfo.map((x) => [x?.seasonNumber, mediaStatus({ status: x?.status4k })]));
+  // requests somebody has made and that are still standing (waiting for approval, or approved), and the seasons they cover
+  const requests = [];
+  const asked = { hd: new Set(), uhd: new Set() };
   for (const r of Array.isArray(info?.requests) ? info.requests : []) {
-    if (r?.status === 1 || r?.status === 2) for (const sn of Array.isArray(r.seasons) ? r.seasons : []) if (Number.isInteger(sn?.seasonNumber)) asked.add(sn.seasonNumber);
+    if (!(r?.status === 1 || r?.status === 2) || !id(r?.id)) continue;
+    const tier = r.is4k === true ? 'uhd' : 'hd';
+    const nums = (Array.isArray(r.seasons) ? r.seasons : []).map((sn) => sn?.seasonNumber).filter(Number.isInteger);
+    requests.push({ id: r.id, is4k: tier === 'uhd', status: r.status, by: text(r?.requestedBy?.displayName ?? r?.requestedBy?.username, 60), seasons: nums });
+    for (const n of nums) asked[tier].add(n);
   }
   const year = /^(\d{4})/.exec(String(d?.releaseDate ?? d?.firstAirDate ?? ''))?.[1];
   return {
     tmdbId: tid, type, title: text(d?.title ?? d?.name, 200) || '(untitled)', year: year ? Number(year) : null,
+    links: [
+      ...(/^tt\d{5,10}$/.test(String(d?.externalIds?.imdbId ?? d?.imdbId)) ? [{ label: 'IMDb', url: `https://www.imdb.com/title/${d?.externalIds?.imdbId ?? d.imdbId}/` }] : []),
+      { label: 'TMDB', url: `https://www.themoviedb.org/${k}/${tid}` },
+    ],
     tagline: text(d?.tagline, 200), overview: text(d?.overview, 2000),
     poster: image(d?.posterPath, 'w500'), backdrop: image(d?.backdropPath, 'w1280'),
     genres: (Array.isArray(d?.genres) ? d.genres : []).map((g) => text(g?.name, 40)).filter(Boolean).slice(0, 8),
     runtime: num(k === 'movie' ? d?.runtime : d?.episodeRunTime?.[0]) > 0 ? (k === 'movie' ? d.runtime : d.episodeRunTime[0]) : null,
     rating: num(d?.voteAverage) > 0 ? Math.round(d.voteAverage * 10) / 10 : null,
     votes: Number.isInteger(d?.voteCount) && d.voteCount >= 0 ? d.voteCount : null,
-    status: mediaStatus(info),
-    inLibrary: libraryIndex(items).get(`${type}:${tid}`) || null,
-    cast: (Array.isArray(d?.credits?.cast) ? d.credits.cast : []).slice(0, 12).map((c) => ({ name: text(c?.name, 80), character: text(c?.character, 80) })).filter((c) => c.name),
+    status: mediaStatus(info), status4k: mediaStatus({ status: info?.status4k }), can4k: await has4k(k), requests,
+    ...inLibraryOf(libraryIndex(items), type, tid),
+    cast: shapeCast(d?.credits?.cast),
     seasons: k === 'tv'
       ? (Array.isArray(d?.seasons) ? d.seasons : []).filter((x) => Number.isInteger(x?.seasonNumber) && x.seasonNumber > 0).slice(0, 200).map((x) => ({
         number: x.seasonNumber, name: text(x.name, 80) || `Season ${x.seasonNumber}`, episodes: Number.isInteger(x.episodeCount) ? x.episodeCount : null,
-        airDate: /^\d{4}-\d{2}-\d{2}$/.test(String(x.airDate)) ? x.airDate : null, status: bySeason.get(x.seasonNumber) ?? null, requested: asked.has(x.seasonNumber),
+        airDate: /^\d{4}-\d{2}-\d{2}$/.test(String(x.airDate)) ? x.airDate : null, status: bySeason.get(x.seasonNumber) ?? null, status4k: bySeason4k.get(x.seasonNumber) ?? null,
+        requested: asked.hd.has(x.seasonNumber), requested4k: asked.uhd.has(x.seasonNumber),
       }))
       : null,
   };
 }
 
+/* ---------- one person ---------- */
+// Who they are and what they have been in, most popular first, each marked with where it stands in your library and Overseerr.
+export async function personDetails(personId) {
+  const pid = id(Number(personId));
+  if (!pid) throw userError('Unknown person');
+  const s = svc();
+  const [p, c] = await Promise.all([
+    cached(`person:${pid}`, 10 * 60000, () => api(s, `/api/v1/person/${pid}`)),
+    cached(`credits:${pid}`, 10 * 60000, () => api(s, `/api/v1/person/${pid}/combined_credits`).catch(() => null)),
+  ]);
+  const { items } = await getLibrary(false);
+  const seen = new Set();
+  const cast = (Array.isArray(c?.cast) ? c.cast : []).filter((x) => num(x?.popularity) !== null).sort((a, b) => b.popularity - a.popularity);
+  const credits = shapeResults(cast).filter((r) => r.poster && !seen.has(r.type + r.tmdbId) && seen.add(r.type + r.tmdbId)).slice(0, 80);
+  const born = /^\d{4}-\d{2}-\d{2}$/.test(String(p?.birthday)) ? p.birthday : null;
+  return {
+    id: pid, name: text(p?.name, 80) || '(unknown)', photo: image(p?.profilePath, 'w342'),
+    bio: text(p?.biography, 1800), born, died: /^\d{4}-\d{2}-\d{2}$/.test(String(p?.deathday)) ? p.deathday : null, birthplace: text(p?.placeOfBirth, 120),
+    link: `https://www.themoviedb.org/person/${pid}`,
+    credits: withLibrary(credits, libraryIndex(items)),
+  };
+}
+
+/* ---------- a person's titles in your library ---------- */
+// Which of your library's titles this person is in (cast credits, matched by TMDB id): for filtering the library by actor.
+export async function personLibrary(personId) {
+  const pid = id(Number(personId));
+  if (!pid) throw userError('Unknown person');
+  const s = svc();
+  const [p, c] = await Promise.all([
+    cached(`person:${pid}`, 10 * 60000, () => api(s, `/api/v1/person/${pid}`)),
+    cached(`credits:${pid}`, 10 * 60000, () => api(s, `/api/v1/person/${pid}/combined_credits`)),
+  ]);
+  const credited = new Set((Array.isArray(c?.cast) ? c.cast : []).map((x) => `${x?.mediaType === 'movie' ? 'movie' : x?.mediaType === 'tv' ? 'show' : ''}:${x?.id}`));
+  const { items } = await getLibrary(false);
+  return { id: pid, name: text(p?.name, 80) || '(unknown)', keys: items.filter((i) => i.tmdbId && credited.has(`${i.type}:${i.tmdbId}`)).map((i) => i.key) };
+}
+
 /* ---------- asking for a title ---------- */
 // seasons (shows only): "all" or a list of season numbers.
-export async function requestTitle({ type, tmdbId, seasons }) {
+export async function requestTitle({ type, tmdbId, seasons, is4k = false }) {
   const k = kind(type);
   const tid = id(tmdbId);
   if (!tid) throw userError('Unknown title');
@@ -131,6 +191,11 @@ export async function requestTitle({ type, tmdbId, seasons }) {
     }
     body = { mediaType: 'tv', mediaId: tid, seasons: seasons === 'all' ? 'all' : [...new Set(seasons)] };
   }
+  if (is4k) {
+    if (is4k !== true) throw userError('Unknown quality');
+    if (!(await has4k(k))) throw userError(`Overseerr has no 4K ${k === 'movie' ? 'Radarr' : 'Sonarr'} set up.`);
+    body.is4k = true;
+  }
   let r;
   try { r = await api(svc(), '/api/v1/request', { method: 'POST', body }); } catch (e) {
     const code = /-> (\d{3})(?!\d)/.exec(String(e.message))?.[1];
@@ -141,4 +206,18 @@ export async function requestTitle({ type, tmdbId, seasons }) {
   }
   cache.delete(`title:${k}:${tid}`); // its status just changed
   return { ok: true, requestStatus: r?.status === 2 ? 'approved' : 'pending' }; // 1 waits for approval, 2 is approved and sent on
+}
+
+/* ---------- taking a request back ---------- */
+// Removes the request from Overseerr. What it already sent to Radarr or Sonarr is left alone.
+export async function cancelRequest(requestId) {
+  if (!id(requestId)) throw userError('Unknown request');
+  try { await api(svc(), `/api/v1/request/${requestId}`, { method: 'DELETE' }); } catch (e) {
+    const code = /-> (\d{3})(?!\d)/.exec(String(e.message))?.[1];
+    if (code === '404') throw userError('That request is already gone.');
+    if (code === '403') throw userError('Overseerr will not let this key remove that request.');
+    throw e;
+  }
+  for (const key of cache.keys()) if (key.startsWith('title:')) cache.delete(key); // its status just changed
+  return { ok: true };
 }

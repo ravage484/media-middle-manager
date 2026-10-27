@@ -220,9 +220,10 @@ async function buildLibrary() {
         const size = movie ? m.sizeOnDisk || 0 : m.statistics?.sizeOnDisk || 0;
         const hasFile = movie ? !!m.hasFile : (m.statistics?.episodeFileCount || 0) > 0;
         const img = m.images?.find((i) => i.coverType === 'poster');
+        const fan = m.images?.find((i) => i.coverType === 'fanart');
         const it = map.get(key) || {
           key, type, title: m.title, year: m.year, tmdbId: m.tmdbId, tvdbId: m.tvdbId,
-          poster: img?.remoteUrl || null, overview: m.overview, added: m.added,
+          poster: img?.remoteUrl || null, backdrop: fan?.remoteUrl || null, overview: m.overview, added: m.added,
           size: 0, hasFile: false, monitored: false, instances: [], genres: m.genres || [], episodes: 0, tags: [], rating: null,
         };
         it.tags = [...new Set([...it.tags, ...tags])].sort();
@@ -231,6 +232,7 @@ async function buildLibrary() {
         it.hasFile ||= hasFile;
         it.monitored ||= !!m.monitored;
         it.poster ||= img?.remoteUrl || null;
+        it.backdrop ||= fan?.remoteUrl || null;
         it.rating ??= ratingOf(m, movie);
         it.instances.push({ serviceId: s.id, serviceName: s.name, arrId: m.id, monitored: !!m.monitored, size, hasFile, path: m.path,
           root: (m.rootFolderPath || (m.path || '').replace(/[\\/][^\\/]*$/, '')).replace(/[\\/]+$/, '') || '(unknown)' });

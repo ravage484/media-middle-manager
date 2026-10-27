@@ -1,23 +1,37 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from './api.js';
 import Carousel from './Carousel.jsx';
+import CoverFlow from './CoverFlow.jsx';
 import TitleCard from './TitleCard.jsx';
 import DiscoverTitle from './DiscoverTitle.jsx';
 import LibraryCard from './LibraryCard.jsx';
 import Icon from './Icon.jsx';
+import CastRow from './CastRow.jsx';
 
 // Find something to watch, the way Overseerr's Discover page does: search, rows of what is trending, popular and coming soon, and
 // browsing by genre. Opening a title shows it and lets you request it; what you already own is marked.
 const ROWS = [
-  { id: 'trending', title: 'Trending', params: { section: 'trending' } },
+  { id: 'trending', title: 'Trending', params: { section: 'trending' }, flow: true },
   { id: 'movies', title: 'Popular movies', params: { section: 'movies' } },
   { id: 'tv', title: 'Popular series', params: { section: 'tv' } },
   { id: 'upcomingMovies', title: 'Upcoming movies', params: { section: 'upcomingMovies' } },
   { id: 'upcomingTv', title: 'Upcoming series', params: { section: 'upcomingTv' } },
 ];
 
+// The genres as one row of chips that scrolls sideways, like the poster rows below it (drag it, or use the arrows).
+function GenreChips({ genres, onPick, resetKey }) {
+  return (
+    <div className="genrerow">
+      <Carousel resetKey={resetKey}>
+        {genres.map((g) => <button key={g.id} onClick={() => onPick(g)}>{g.name}</button>)}
+      </Carousel>
+    </div>
+  );
+}
+
 // A row of titles from one list, with a link to see all of it.
-function Row({ title, params, version, onSeeAll, onOpen }) {
+// flow: show it as a Cover Flow instead of a scrolling row.
+function Row({ title, params, version, flow, onSeeAll, onOpen }) {
   const [state, setState] = useState({ list: [], loading: true, err: '' });
   useEffect(() => {
     let live = true;
@@ -34,10 +48,14 @@ function Row({ title, params, version, onSeeAll, onOpen }) {
         <button className="link withicon" onClick={onSeeAll}>See all<Icon name="chevronRight" size={14} /></button>
       </div>
       {state.err && <div className="notice bad">{state.err}</div>}
-      <Carousel stale={state.loading && state.list.length > 0}>
-        {state.list.map((r) => <TitleCard key={r.type + r.tmdbId} r={r} onOpen={onOpen} />)}
-        {state.loading && !state.list.length && <span className="dim">Loading…</span>}
-      </Carousel>
+      {flow && state.list.length > 0
+        ? <CoverFlow items={state.list} onOpen={onOpen} label={title} />
+        : (
+          <Carousel stale={state.loading && state.list.length > 0}>
+            {state.list.map((r) => <TitleCard key={r.type + r.tmdbId} r={r} onOpen={onOpen} />)}
+            {state.loading && !state.list.length && <span className="dim">Loading…</span>}
+          </Carousel>
+        )}
     </section>
   );
 }
@@ -49,16 +67,17 @@ function Grid({ title, fetchPage, version, onBack, onOpen }) {
   const [more, setMore] = useState(true);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
+  const [people, setPeople] = useState([]); // actors and others a search found (the first page only)
   const req = useRef(0);
   const load = (p) => {
     const mine = ++req.current;
     setLoading(true); setErr('');
     fetchPage(p)
-      .then((d) => { if (mine !== req.current) return; setList((cur) => (p === 1 ? d.results : [...cur, ...d.results])); setPage(d.page); setMore(d.hasMore); })
+      .then((d) => { if (mine !== req.current) return; setList((cur) => (p === 1 ? d.results : [...cur, ...d.results])); if (p === 1) setPeople(d.people || []); setPage(d.page); setMore(d.hasMore); })
       .catch((e) => { if (mine === req.current) setErr(e.message); })
       .finally(() => { if (mine === req.current) setLoading(false); });
   };
-  useEffect(() => { setList([]); setMore(true); load(1); }, [title, version]);
+  useEffect(() => { setList([]); setPeople([]); setMore(true); load(1); }, [title, version]);
   return (
     <section>
       <div className="recshead">
@@ -66,6 +85,7 @@ function Grid({ title, fetchPage, version, onBack, onOpen }) {
         <h3 style={{ flex: 1 }}>{title}</h3>
       </div>
       {err && <div className="notice bad">{err}</div>}
+      <CastRow cast={people} title="People" />
       {!err && !loading && list.length === 0 && <p className="dim">Nothing found.</p>}
       <div className="dgrid">
         {list.map((r) => <TitleCard key={r.type + r.tmdbId} r={r} onOpen={onOpen} />)}
@@ -76,7 +96,7 @@ function Grid({ title, fetchPage, version, onBack, onOpen }) {
   );
 }
 
-export default function Discover({ goSettings }) {
+export default function Discover({ goSettings, preset }) {
   const [has, setHas] = useState(null); // is Overseerr set up?
   const [q, setQ] = useState('');
   const [view, setView] = useState({ mode: 'home' });
@@ -86,6 +106,7 @@ export default function Discover({ goSettings }) {
   const [genreType, setGenreType] = useState('movie');
   const [genres, setGenres] = useState([]);
 
+  useEffect(() => { if (preset?.q) setQ(preset.q); }, [preset]); // a search typed on Home
   useEffect(() => { api.services().then((l) => setHas(l.some((s) => s.type === 'overseerr'))).catch(() => setHas(false)); }, []);
   useEffect(() => {
     if (!has) return;
@@ -133,13 +154,9 @@ export default function Discover({ goSettings }) {
               {[['movie', 'Movies'], ['show', 'Series']].map(([t, l]) => <button key={t} className={genreType === t ? 'active' : ''} onClick={() => setGenreType(t)}>{l}</button>)}
             </div>
           </div>
-          <div className="fchips genrechips">
-            {genres.map((g) => (
-              <button key={g.id} onClick={() => setView({ mode: 'section', title: `${g.name} ${genreType === 'movie' ? 'movies' : 'series'}`, params: { section: 'genre', type: genreType, genre: g.id } })}>{g.name}</button>
-            ))}
-          </div>
+          <GenreChips genres={genres} resetKey={genreType} onPick={(g) => setView({ mode: 'section', title: `${g.name} ${genreType === 'movie' ? 'movies' : 'series'}`, params: { section: 'genre', type: genreType, genre: g.id } })} />
         </section>
-        {ROWS.map((r) => <Row key={r.id} title={r.title} params={r.params} version={version} onSeeAll={() => seeAll(r)} onOpen={openTitle} />)}
+        {ROWS.map((r) => <Row key={r.id} title={r.title} params={r.params} flow={r.flow} version={version} onSeeAll={() => seeAll(r)} onOpen={openTitle} />)}
       </>
     );
   }
@@ -149,7 +166,7 @@ export default function Discover({ goSettings }) {
       <h2 className="ptitle2">Discover</h2>
       <div className="dsearch">
         <Icon name="search" size={18} />
-        <input placeholder="Search movies and series…" value={q} onChange={(e) => setQ(e.target.value)} autoComplete="off" />
+        <input placeholder="Search movies, series and people…" value={q} onChange={(e) => setQ(e.target.value)} autoComplete="off" />
         {q && <button className="icon" aria-label="Clear search" onClick={back}><Icon name="x" size={16} /></button>}
       </div>
       {body}

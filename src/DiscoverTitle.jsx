@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useTopEscape } from './useTopEscape.js';
 import { api } from './api.js';
 import Icon from './Icon.jsx';
+import CastRow from './CastRow.jsx';
+import { statusOf } from './status.js';
 
-// One movie or show from Discover: what it is, where it stands, and a button to request it. For a show you choose the seasons.
-const STATUS = { 2: ['Requested', 'warn'], 3: ['Requested', 'warn'], 4: ['Partially available', 'warn'], 5: ['Available', 'ok'] };
+// One movie or show from Discover: what it is, where it stands, and buttons to request it (in HD or, when Overseerr has a 4K server, 4K)
+// or to take a request back. For a show you choose the seasons.
 const mins = (m) => (m ? (m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m} minutes`) : null);
 
 export default function DiscoverTitle({ type, tmdbId, onClose, onOpenLibrary, onRequested }) {
@@ -13,29 +16,31 @@ export default function DiscoverTitle({ type, tmdbId, onClose, onOpenLibrary, on
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState('');
   const [badImg, setBadImg] = useState(false);
-  const [sent, setSent] = useState(false); // a request has gone through from this window
+  const [uhd, setUhd] = useState(false); // asking for / looking at the 4K version
   const isShow = type === 'show';
 
+  // per version (HD or 4K): where the title stands and which seasons are here or already asked for
+  const tier = (d, u) => ({
+    status: u ? d.status4k : d.status,
+    seasons: (d.seasons || []).map((s) => ({ ...s, status: u ? s.status4k : s.status, requested: u ? s.requested4k : s.requested })),
+    requests: d.requests.filter((r) => r.is4k === u),
+  });
+  // what is worth asking for: seasons that are neither here nor already asked for
+  const wanted = (d, u) => new Set(tier(d, u).seasons.filter((s) => s.status !== 5 && !s.requested).map((s) => s.number));
   const load = (first) => api.discoverTitle(type, tmdbId).then((d) => {
     setT(d);
-    // what is worth asking for: seasons that are neither here nor already asked for
-    if (first) setPicked(new Set((d.seasons || []).filter((s) => s.status !== 5 && !s.requested).map((s) => s.number)));
+    if (first) setPicked(wanted(d, false));
   }).catch((e) => setErr(e.message));
-  useEffect(() => { load(true); }, [type, tmdbId]);
-  useEffect(() => {
-    // capture phase and stopped here, so Escape closes this window only, not the title window it may be open over
-    const esc = (e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } };
-    window.addEventListener('keydown', esc, true);
-    return () => window.removeEventListener('keydown', esc, true);
-  }, [onClose]);
+  useEffect(() => { setUhd(false); load(true); }, [type, tmdbId]);
+  const layer = useRef(null);
+  useTopEscape(layer, onClose); // Escape closes this window only, not the one it may be open over
 
   const request = async () => {
     setBusy(true); setErr(''); setDone('');
     try {
-      const body = { type, id: tmdbId, ...(isShow ? { seasons: [...picked].sort((a, b) => a - b) } : {}) };
+      const body = { type, id: tmdbId, ...(uhd ? { is4k: true } : {}), ...(isShow ? { seasons: [...picked].sort((a, b) => a - b) } : {}) };
       const r = await api.discoverRequest(body);
       setDone(r.requestStatus === 'approved' ? 'Requested. It has been approved and sent to your download manager.' : 'Requested. It is waiting for approval in Overseerr.');
-      setSent(true);
       onRequested?.();
       await load(false);
       setPicked(new Set());
@@ -43,15 +48,32 @@ export default function DiscoverTitle({ type, tmdbId, onClose, onOpenLibrary, on
     setBusy(false);
   };
 
-  const badge = t && (t.inLibrary ? ['In library', 'ok'] : STATUS[t.status]);
-  const available = t && !isShow && t.status === 5;
-  const asked = t && !isShow && (sent || t.status === 2 || t.status === 3); // a movie that is already on its way
-  const left = t && isShow ? t.seasons.filter((s) => s.status !== 5 && !s.requested) : [];
+  const unrequest = async (r) => {
+    setBusy(true); setErr(''); setDone('');
+    try {
+      await api.discoverUnrequest(r.id);
+      setDone('Request cancelled.');
+      onRequested?.();
+      const d = await api.discoverTitle(type, tmdbId);
+      setT(d);
+      setPicked(wanted(d, uhd));
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+
+  const pickTier = (u) => { setUhd(u); setDone(''); setErr(''); if (t) setPicked(wanted(t, u)); };
+
+  const v = t && tier(t, uhd);
+  const badge = t && statusOf({ ...t, status: t.can4k ? (t.status === 5 ? t.status : t.status4k ?? t.status) : t.status });
+  const available = v && !isShow && v.status === 5;
+  const asked = v && !isShow && (v.requests.length > 0 || v.status === 2 || v.status === 3); // a movie that is already on its way
+  const left = v && isShow ? v.seasons.filter((s) => s.status !== 5 && !s.requested) : [];
+  const label = uhd ? '4K' : t?.can4k ? 'HD' : '';
   const flip = (n) => setPicked((s) => { const x = new Set(s); x.has(n) ? x.delete(n) : x.add(n); return x; });
   const sub = t && [isShow ? (t.seasons.length ? `${t.seasons.length} Season${t.seasons.length === 1 ? '' : 's'}` : null) : mins(t.runtime), t.genres.join(', ')].filter(Boolean);
 
   return (
-    <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="overlay" data-layer ref={layer} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="dialog detail" role="dialog" aria-label={t?.title || 'Title'}>
         <div className="hero" style={t?.backdrop ? { backgroundImage: `url("${t.backdrop}")` } : undefined}>
           <button className="x" onClick={onClose} aria-label="Close" title="Close"><Icon name="x" size={18} /></button>
@@ -74,18 +96,14 @@ export default function DiscoverTitle({ type, tmdbId, onClose, onOpenLibrary, on
                 {t.tagline && <p className="tagline">{t.tagline}</p>}
                 <h3>Overview</h3>
                 <p className="overview">{t.overview || 'No overview available.'}</p>
-                {t.cast.length > 0 && (
-                  <>
-                    <h3>Cast</h3>
-                    <div className="chips">{t.cast.map((c) => <span key={c.name + c.character} className="chip small" title={c.character || undefined}>{c.name}</span>)}</div>
-                  </>
-                )}
-                {isShow && t.seasons.length > 0 && (
+                <CastRow cast={t.cast} />
+                {isShow && v.seasons.length > 0 && (
                   <>
                     <h3>Seasons</h3>
                     <ul className="dseasons">
-                      {t.seasons.map((s) => {
-                        const state = s.status === 5 ? ['Available', 'ok'] : s.requested ? ['Requested', 'warn'] : s.status === 4 ? ['Partial', 'warn'] : null;
+                      {v.seasons.map((s) => {
+                        const ask = s.requested ? v.requests.find((r) => r.seasons.includes(s.number)) : null; // its request: waiting for approval, or approved
+                        const state = s.status === 5 ? ['Available', 'ok'] : ask ? [ask.status === 1 ? 'Pending' : s.status === 3 ? 'Processing' : 'Approved', 'warn'] : s.status === 4 ? ['Partially available', 'warn'] : null;
                         const locked = s.status === 5 || s.requested;
                         return (
                           <li key={s.number} className={locked ? 'locked' : ''}>
@@ -106,16 +124,33 @@ export default function DiscoverTitle({ type, tmdbId, onClose, onOpenLibrary, on
                 <div className="infocard">
                   {t.rating && <div className="ratings"><span className="rate"><b>{t.rating.toFixed(1)}/10</b><small>TMDB{t.votes ? ` · ${t.votes.toLocaleString()} votes` : ''}</small></span></div>}
                   <div className="requestbox">
+                    {t.can4k && (
+                      <div className="seg" role="group" aria-label="Quality">
+                        <button className={uhd ? '' : 'primary'} disabled={busy} onClick={() => pickTier(false)}>HD</button>
+                        <button className={uhd ? 'primary' : ''} disabled={busy} onClick={() => pickTier(true)}>4K</button>
+                      </div>
+                    )}
                     {t.inLibrary && <button className="primary" onClick={() => onOpenLibrary(t.inLibrary)}>Open in your library</button>}
-                    {available && !t.inLibrary && <p className="dim">This is already available.</p>}
-                    {asked && !available && <p className="dim">This has been requested.</p>}
+                    {available && !t.inLibrary && <p className="dim">This is already available{label ? ` in ${label}` : ''}.</p>}
+                    {asked && !available && <p className="dim">This has been requested{label ? ` in ${label}` : ''}.</p>}
+                    {v.requests.map((r) => (
+                      <button key={r.id} disabled={busy} onClick={() => unrequest(r)}
+                        title="Removes the request from Overseerr. Anything it already sent to Radarr or Sonarr stays there.">
+                        {busy ? 'Working…' : `Cancel ${r.status === 1 ? 'pending ' : ''}request${r.by ? ` by ${r.by}` : ''}${isShow && r.seasons.length ? ` (S${r.seasons.join(', S')})` : ''}`}
+                      </button>
+                    ))}
                     {!available && !asked && (isShow && !left.length
-                      ? <p className="dim">{t.seasons.length ? 'Every season is already available or requested.' : 'There are no seasons to request yet.'}</p>
+                      ? <p className="dim">{v.seasons.length ? 'Every season is already available or requested.' : 'There are no seasons to request yet.'}</p>
                       : <button className={t.inLibrary ? '' : 'primary'} disabled={busy || (isShow && !picked.size)} onClick={request}>
-                        {busy ? 'Requesting…' : isShow ? `Request ${picked.size} season${picked.size === 1 ? '' : 's'}` : 'Request movie'}
+                        {busy ? 'Requesting…' : isShow ? `Request ${picked.size} season${picked.size === 1 ? '' : 's'}${uhd ? ' in 4K' : ''}` : uhd ? 'Request movie in 4K' : 'Request movie'}
                       </button>)}
                     <small className="dim">A request goes to Overseerr, which sends it to {isShow ? 'Sonarr' : 'Radarr'} the way a request made there would.</small>
                   </div>
+                  {t.links?.length > 0 && (
+                    <div className="xlinks">
+                      {t.links.map((l) => <a key={l.url} href={l.url} target="_blank" rel="noopener noreferrer">{l.label}</a>)}
+                    </div>
+                  )}
                 </div>
               </aside>
             </div>

@@ -6,6 +6,7 @@ import EpisodePicker from './EpisodePicker.jsx';
 import EpisodeDeleteDialog from './EpisodeDeleteDialog.jsx';
 import Icon from './Icon.jsx';
 import Recommendations from './Recommendations.jsx';
+import CastRow from './CastRow.jsx';
 import TrailerDialog from './TrailerDialog.jsx';
 import { useKeep } from './keep.js';
 
@@ -117,6 +118,7 @@ export default function Detail({ item, hasWatch, hasPlex, hasOverseerr, onClose,
                   </ul>
                 </>
               )}
+              <CastRow cast={d?.cast} />
               {hasOverseerr && <Recommendations item={item} onOpen={onOpen} />}
             </div>
 

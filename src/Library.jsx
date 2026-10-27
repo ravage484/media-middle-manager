@@ -5,10 +5,12 @@ import FilterPanel from './FilterPanel.jsx';
 import Detail from './Detail.jsx';
 import Poster from './Poster.jsx';
 import Icon from './Icon.jsx';
+import SortTh, { sortClick } from './SortTh.jsx';
 import ItemMenu from './ItemMenu.jsx';
 import PlexListDialog from './PlexListDialog.jsx';
 import { useKeep } from './keep.js';
 import LoadingLogo from './LoadingLogo.jsx';
+import CastRow from './CastRow.jsx';
 
 // Each sort returns an ascending comparator; the direction toggle flips it.
 const perEp = (i) => (i.type === 'show' && i.episodes ? i.size / i.episodes : i.size);
@@ -22,6 +24,7 @@ const SORTS = {
   perep: ['Size per episode', (a, b) => perEp(a) - perEp(b), LARGEST],
   episodes: ['Episode count', (a, b) => a.episodes - b.episodes, MOST],
   title: ['Title', (a, b) => a.title.localeCompare(b.title), ['Z to A', 'A to Z']],
+  type: ['Type', (a, b) => a.type.localeCompare(b.type), ['Shows first', 'Movies first']],
   added: ['Date added', (a, b) => (a.added || '').localeCompare(b.added || ''), NEWEST],
   year: ['Year', (a, b) => (a.year || 0) - (b.year || 0), NEWEST],
   rating: ['Rating', (a, b) => (a.rating || 0) - (b.rating || 0), ['Highest first', 'Lowest first']], // titles without a rating count as 0, so they sit last when sorting high to low
@@ -85,6 +88,8 @@ export default function Library({ goSettings, appearance, preset }) {
   const [keepSel, setKeepSel] = useState(empty()); // Kept / Not kept
   const [colSel, setColSel] = useState(empty());
   const [plSel, setPlSel] = useState(empty());
+  const [actor, setActor] = useState(null); // { id, name, keys: Set }: only titles this person is in
+  const [people, setPeople] = useState([]); // people matching what is typed in the search box
   const [plex, setPlex] = useState({ map: {}, status: {} }); // what Plex says about each title, cached by the server
   const [kw, setKw] = useState({ map: {}, status: { running: false, cached: 0 } }); // keywords from Overseerr, cached by the server
 
@@ -121,6 +126,18 @@ export default function Library({ goSettings, appearance, preset }) {
     return [...n].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([k, c]) => [k, `${k} (${c})`]);
   }, [data.items, kw.map]);
   const hasOverseerr = data.serviceTypes.includes('overseerr');
+  // Typing a name also looks for people with that name (through Overseerr); picking one filters the library to what they are in.
+  useEffect(() => {
+    const s = q.trim();
+    if (!hasOverseerr || s.length < 3) { setPeople([]); return undefined; }
+    let live = true;
+    const t = setTimeout(() => { api.discoverSearch(s, 1).then((d) => live && setPeople((d.people || []).filter((p) => p.photo).slice(0, 8))).catch(() => live && setPeople([])); }, 400);
+    return () => { live = false; clearTimeout(t); };
+  }, [q, hasOverseerr]);
+  const pickActor = (p) => {
+    api.libraryPerson(p.id).then((d) => { setActor({ id: d.id, name: d.name, keys: new Set(d.keys) }); setQ(''); }).catch((e) => setErr(e.message));
+  };
+
   // Collections and playlists that Plex has, with how many library titles are in each.
   const plexOpts = useMemo(() => {
     const col = new Map(), pl = new Map();
@@ -154,6 +171,7 @@ export default function Library({ goSettings, appearance, preset }) {
       const names = [...d.value].map((v) => (d.plain ? v : d.options.find(([k]) => k === v)?.[1] ?? v));
       return { id: d.id, label: d.label, text: names.length > 2 ? `${names.slice(0, 2).join(', ')} +${names.length - 2}` : names.join(', '), clear: () => d.set(empty()) };
     }),
+    actor && { id: 'actor', label: 'Cast', text: actor.name, clear: () => setActor(null) },
     staleDays && { id: 'stale', label: 'Not watched in', text: `${staleDays} days`, clear: () => setStaleDays('') },
     (minGB || maxGB) && { id: 'size', label: 'Size', text: `${minGB || 0} to ${maxGB || '∞'} GB`, clear: () => { setMinGB(''); setMaxGB(''); } },
   ].filter(Boolean);
@@ -168,8 +186,8 @@ export default function Library({ goSettings, appearance, preset }) {
     if (preset.sort && SORTS[preset.sort]) { setSort(preset.sort); setDesc(preset.desc !== false); }
   }, [preset, data.items, opts]);
 
-  const filtered = !!(types.size || statuses.size || instances.size || roots.size || genres.size || tagSel.size || kwSel.size || keepSel.size || colSel.size || plSel.size || watches.size || staleDays || minGB || maxGB);
-  const clearFilters = () => { setKeepSel(empty()); setColSel(empty()); setPlSel(empty()); setKwSel(empty()); setTagSel(empty());setTypes(empty()); setStatuses(empty()); setInstances(empty()); setRoots(empty()); setGenres(empty()); setWatches(empty()); setStaleDays(''); setMinGB(''); setMaxGB(''); };
+  const filtered = !!(actor || types.size || statuses.size || instances.size || roots.size || genres.size || tagSel.size || kwSel.size || keepSel.size || colSel.size || plSel.size || watches.size || staleDays || minGB || maxGB);
+  const clearFilters = () => { setActor(null); setKeepSel(empty()); setColSel(empty()); setPlSel(empty()); setKwSel(empty()); setTagSel(empty());setTypes(empty()); setStatuses(empty()); setInstances(empty()); setRoots(empty()); setGenres(empty()); setWatches(empty()); setStaleDays(''); setMinGB(''); setMaxGB(''); };
 
   const shown = useMemo(() => {
     const t = q.trim().toLowerCase();
@@ -179,6 +197,7 @@ export default function Library({ goSettings, appearance, preset }) {
     return data.items
       .filter((i) => (!types.size || types.has(i.type))
         && (!t || i.title.toLowerCase().includes(t))
+        && (!actor || actor.keys.has(i.key))
         && (!statuses.size || [...statuses].some((s) => STATUS_TEST[s](i)))
         && (!instances.size || i.instances.some((n) => instances.has(n.serviceId)))
         && (!roots.size || i.instances.some((n) => roots.has(n.root)))
@@ -192,7 +211,7 @@ export default function Library({ goSettings, appearance, preset }) {
         && (!staleDays || stale(i, Number(staleDays)))
         && i.size >= min && i.size <= max)
       .sort((a, b) => (desc ? -1 : 1) * cmp(a, b));
-  }, [data.items, kw.map, kwSel, keep.map, keepSel, plex.map, colSel, plSel, q, types, statuses, instances, roots, genres, tagSel, watches, staleDays, minGB, maxGB, sort, desc]);
+  }, [data.items, actor, kw.map, kwSel, keep.map, keepSel, plex.map, colSel, plSel, q, types, statuses, instances, roots, genres, tagSel, watches, staleDays, minGB, maxGB, sort, desc]);
   const shownBytes = useMemo(() => shown.reduce((n, i) => n + i.size, 0), [shown]);
 
   // Only the current page is rendered, which keeps the DOM (and poster requests) small.
@@ -237,12 +256,18 @@ export default function Library({ goSettings, appearance, preset }) {
     onDelete: (e) => { e.stopPropagation(); setDialog([item.key]); },
     onMenu: (e) => { e.stopPropagation(); setMenu({ item, rect: e.currentTarget.getBoundingClientRect() }); },
   });
+  const sortBy = (k) => sortClick(sort, desc, k, (s, d) => { setSort(s); setDesc(d); });
+  const th = (k, label, className) => <SortTh k={k} label={label} sort={sort} desc={desc} onSort={sortBy} className={className} />;
   const noServices = !loading && !data.items.length && !data.errors.length && !err;
 
   return (
     <>
       <div className="toolbar">
-        <input className="search" placeholder="Search your library…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <div className="dsearch toolbarsearch">
+          <Icon name="search" size={18} />
+          <input placeholder="Search your library…" value={q} onChange={(e) => setQ(e.target.value)} autoComplete="off" aria-label="Search your library" />
+          {q && <button className="icon" aria-label="Clear search" onClick={() => setQ('')}><Icon name="x" size={16} /></button>}
+        </div>
         <select value={sort} onChange={(e) => setSort(e.target.value)}>
           {Object.entries(SORTS).map(([k, [label]]) => <option key={k} value={k}>Sort: {label}</option>)}
         </select>
@@ -255,6 +280,8 @@ export default function Library({ goSettings, appearance, preset }) {
         <button className={`withicon filtersbtn ${chips.length ? 'on' : ''}`} aria-expanded={panel} onClick={() => setPanel(!panel)}><Icon name="filter" size={15} />Filters{chips.length ? ` (${chips.length})` : ''}</button>
         <button className={`refreshbtn ${loading ? 'spin' : ''}`} onClick={() => load(true)} disabled={loading} title={loading ? 'Loading…' : 'Refresh the library'} aria-label="Refresh the library"><Icon name="refresh" size={17} /></button>
       </div>
+
+      {people.length > 0 && <div className="libpeople"><CastRow cast={people} title={`People matching “${q.trim()}”: show what they are in`} onPick={pickActor} /></div>}
 
       {(chips.length > 0 || q) && (
         <div className="chiprow">
@@ -280,7 +307,7 @@ export default function Library({ goSettings, appearance, preset }) {
 
       {view === 'list' ? (
         <table className="list">
-          <thead><tr><th /><th /><th>Title</th><th className="hm">Type</th><th className="hm">Managed by</th><th>Size</th><th className="hm">Rating</th>{hasWatch && <th className="hm">Watched</th>}<th className="hm">Status</th><th /></tr></thead>
+          <thead><tr><th /><th />{th('title', 'Title')}{th('type', 'Type', 'hm')}<th className="hm">Managed by</th>{th('size', 'Size')}{th('rating', 'Rating', 'hm')}{hasWatch && th('last', 'Watched', 'hm')}<th className="hm">Status</th><th /></tr></thead>
           <tbody>
             {paged.map((it, i) => { const idx = start + i;
               const p = props(it, idx);

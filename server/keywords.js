@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { getLibrary, getServices, api } from './lib.js';
 import { getKeywordMap, cachedKeywordKeys, setKeywords, getSetting, setSetting } from './db.js';
+import { shapeCast } from './tmdb.js';
 
 /*
  * Overseerr's title pages show TMDB "keywords" (detective, island, murder...). Overseerr has no tags of its own, but its API
@@ -46,6 +47,8 @@ export async function fetchOverseerrMeta(item, svc = overseerrService(), { withR
     keywords: names(d.keywords, 100, 60),
     countries: names(d.productionCountries, 20, 60),
     providers: names(where?.flatrate, 12, 40),
+    cast: shapeCast(d.credits?.cast),
+    imdbId: /^tt\d{5,10}$/.test(String(d.externalIds?.imdbId ?? d.imdbId)) ? String(d.externalIds?.imdbId ?? d.imdbId) : null,
   };
   if (withRatings) {
     const ratings = [];

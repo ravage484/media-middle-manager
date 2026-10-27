@@ -68,7 +68,7 @@ export default {
             if (movie) {
               const kinds = [['digitalRelease', 'Digital release'], ['physicalRelease', 'Physical release'], ['inCinemas', 'In cinemas']];
               const hit = kinds.find(([k]) => win(e[k]));
-              if (hit) rows.push({ id: `m${int(e.id)}`, title: str(e.title, 120), subtitle: hit[1], when: isoDate(e[hit[0]]), ...titleRef(idx, { type: 'movie', tmdbId: int(e.tmdbId), title: e.title, year: int(e.year), poster: posterIn(e.images) }) });
+              if (hit) rows.push({ id: `m${int(e.id)}`, title: str(e.title, 120), subtitle: hit[1], when: isoDate(e[hit[0]]), whenIsDay: true, ...titleRef(idx, { type: 'movie', tmdbId: int(e.tmdbId), title: e.title, year: int(e.year), poster: posterIn(e.images) }) });
             } else if (win(e.airDateUtc)) {
               rows.push({ id: `e${int(e.id)}`, title: str(e.series?.title, 120) || str(e.title, 120), subtitle: `${sxe(e.seasonNumber, e.episodeNumber)}${e.title ? `, ${str(e.title, 60)}` : ''}`, when: isoDate(e.airDateUtc), ...titleRef(idx, { type: 'show', tmdbId: int(e.series?.tmdbId), tvdbId: int(e.series?.tvdbId), title: e.series?.title, year: int(e.series?.year), poster: posterIn(e.series?.images) }) });
             }

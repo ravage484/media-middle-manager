@@ -54,7 +54,8 @@ function Shell({ auth, onSignOut }) {
   const [visited, setVisited] = useState(new Set(['home', 'library'])); // tabs keep their state once opened
   const go = (id) => { setTab(id); setVisited((v) => (v.has(id) ? v : new Set(v).add(id))); };
   const [libPreset, setLibPreset] = useState(null); // filters Home asks the Library to start with
-  const navigate = (id, opts) => { if (id === 'library' && opts) setLibPreset(opts); go(id); };
+  const [findPreset, setFindPreset] = useState(null); // what Home's search box asked Discover to look for
+  const navigate = (id, opts) => { if (id === 'library' && opts) setLibPreset(opts); if (id === 'discover' && opts) setFindPreset(opts); go(id); };
   const [collapsed, setCollapsed] = useState(read);
   const [appearance, setAppearanceState] = useState(loadAppearance);
   const setAppearance = (a) => { applyAppearance(a); setAppearanceState(a); };
@@ -101,9 +102,9 @@ function Shell({ auth, onSignOut }) {
       </nav>
       <main>
         {/* Tabs stay mounted once opened, so search, selection and scroll survive switching */}
-        <div hidden={tab !== 'home'}><Home active={tab === 'home'} onNavigate={navigate} /></div>
+        <div hidden={tab !== 'home'}><Home active={tab === 'home'} onNavigate={navigate} welcome={appearance.welcome} /></div>
         <div hidden={tab !== 'library'}><Library goSettings={() => go('settings')} appearance={appearance} preset={libPreset} /></div>
-        {visited.has('discover') && <div hidden={tab !== 'discover'}><Discover goSettings={() => go('settings')} /></div>}
+        {visited.has('discover') && <div hidden={tab !== 'discover'}><Discover goSettings={() => go('settings')} preset={findPreset} /></div>}
         {visited.has('stale') && <div hidden={tab !== 'stale'}><Stale /></div>}
         {tab === 'history' && <History />}
         {tab === 'settings' && <Settings appearance={appearance} setAppearance={setAppearance} auth={auth} onSignOut={onSignOut} />}

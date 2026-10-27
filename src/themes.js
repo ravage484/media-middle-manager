@@ -14,8 +14,29 @@ export const THEMES = [
   t('slate', 'Slate', '#0f1115', '#1a1d23', '#2d323b', '#f4f4f5', '#9a9fab', '#9ca3af', '#6b7280', '#0f1115', '#0f1115'),
   t('midnight', 'Midnight', '#000000', '#0d0d0d', '#222222', '#e5ffe9', '#7fae8a', '#22ff88', '#00c060', '#000000', '#000000'),
   t('casual', 'Casual Friday', '#f4f1ea', '#ffffff', '#d6d0c2', '#1f2937', '#6b6558', '#0d9488', '#0f766e'),
+  // Casual Friday's sibling themes: the same natural, warm light surfaces (each leaning a little toward its color), with the dark themes' names
+  t('casual-crimson', 'Casual Crimson', '#f5efeb', '#ffffff', '#dccfc8', '#2a1b1e', '#74625f', '#c4343f', '#9f2530'),
+  t('casual-ocean', 'Casual Ocean', '#f1f1ea', '#ffffff', '#d2d4c8', '#1b2a30', '#5f6c6a', '#0e7490', '#155e75'),
+  t('casual-sunset', 'Casual Sunset', '#f6efe4', '#ffffff', '#e0d0b8', '#2b1d12', '#78654f', '#c2570c', '#9a3f06'),
+  t('casual-emerald', 'Casual Emerald', '#f0f1e8', '#ffffff', '#d0d4c0', '#1d2a22', '#5f6e62', '#15803d', '#116530'),
+  t('casual-violet', 'Casual Violet', '#f2eef0', '#ffffff', '#d9cfd6', '#26202e', '#6c6275', '#7c3aed', '#6027c3'),
+  t('casual-rose', 'Casual Rose', '#f6eeea', '#ffffff', '#e2d0ca', '#2d1d22', '#7a6268', '#be185d', '#9d1450'),
   t('paper', 'Paper', '#f3f4f6', '#ffffff', '#d1d5db', '#111827', '#6b7280', '#4f46e5', '#3730a3'),
+  // Three colors, each as a light theme and a dark one. The dark ones are not inversions: they keep the light one's hue,
+  // lift the accent so it reads on a dark surface, and put dark text on filled accent buttons where white would be too faint.
+  t('pink-paper', 'Pink Paper', '#f5f5f7', '#ffffff', '#d5d5da', '#1d1d1f', '#6e6e73', '#fc3c6e', '#d62a5a'), // white with pink
+  t('pink-night', 'Pink Night', '#151517', '#232326', '#3a3a3f', '#f5f5f7', '#9a9aa1', '#ff4d7e', '#fc3c6e', '#1a0610', '#1a0610'),
+  t('silver-blue', 'Silver Blue', '#e6e9ee', '#f7f8fa', '#bfc6d0', '#1c2530', '#566273', '#2f74d6', '#1f58aa'), // brushed silver with blue
+  t('graphite-blue', 'Graphite Blue', '#181b20', '#23272e', '#383e48', '#e9edf3', '#96a0ae', '#5aa0ff', '#3b82e6', '#06152b', '#06152b'),
+  t('tunes-light', 'Tunes Light', '#fafafa', '#ffffff', '#e0e0e3', '#1c1c1e', '#6c6c70', '#fa243c', '#c91a30'), // white with red
+  t('tunes-dark', 'Tunes Dark', '#0a0a0b', '#1c1c1e', '#343437', '#fafafa', '#98989d', '#ff4d5e', '#fa243c', '#1c0306', '#1c0306'),
 ];
+
+// A theme is light when its page background is: the Appearance screen lists the two kinds apart.
+const luma = (hex) => { const n = parseInt(hex.slice(1), 16); return (0.2126 * (n >> 16) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255; };
+export const isLight = (th) => luma(th.bg) > 0.5;
+// Names themes had before they were renamed, so a saved choice (or an imported file) still finds its theme.
+const RENAMED = { itunes: 'pink-paper', 'itunes-night': 'pink-night', 'itunes-aqua': 'silver-blue', 'itunes-graphite': 'graphite-blue', 'itunes-music': 'tunes-light', 'itunes-music-dark': 'tunes-dark', 'red-light': 'tunes-light', 'red-dark': 'tunes-dark' };
 
 export const LOGO_STYLES = [
   ['classic', 'Classic'], ['striped', 'Repp stripe'], ['polka', 'Polka dot'], ['skinny', 'Skinny'], ['bowtie', 'Bow tie'],
@@ -88,13 +109,15 @@ export function logoSvg(style, th) {
 
 /* ---------- apply + persist ---------- */
 const KEY = 'appearance';
-export const DEFAULT = { theme: 'indigo', logo: 'classic', font: 'system' };
+export const WELCOME_MAX = 60;
+export const DEFAULT = { theme: 'indigo', logo: 'classic', font: 'system', welcome: '' }; // welcome: the Home heading; empty keeps "Home"
 
 export function loadAppearance() {
   try {
     const a = JSON.parse(localStorage.getItem(KEY));
+    if (a && RENAMED[a.theme]) a.theme = RENAMED[a.theme];
     if (THEMES.some((x) => x.id === a?.theme) && LOGO_STYLES.some(([id]) => id === a?.logo)) {
-      return { ...a, font: FONTS.some((f) => f.id === a.font) ? a.font : DEFAULT.font };
+      return { ...a, font: FONTS.some((f) => f.id === a.font) ? a.font : DEFAULT.font, welcome: typeof a.welcome === 'string' ? a.welcome.slice(0, WELCOME_MAX) : '' };
     }
   } catch { /* ignore */ }
   return DEFAULT;

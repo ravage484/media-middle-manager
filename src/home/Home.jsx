@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import Icon from '../Icon.jsx';
 import { useManifest, useWidget, refreshWidget } from './store.js';
 import WidgetView from './WidgetView.jsx';
 import DiscoverTitle from '../DiscoverTitle.jsx';
 import LibraryCard from '../LibraryCard.jsx';
+import CoverFlow from '../CoverFlow.jsx';
 
 /*
  * Home: the same widgets in two layouts. Dashboard is everything operational at once, as cards. Media puts posters first and
@@ -26,26 +28,21 @@ function Chip({ w, active, open, onClick }) {
   return <button className={`hchip ${data?.tone === 'warn' ? 'warn' : ''}`} aria-pressed={open} onClick={onClick}><span className={`dot ${data?.tone === 'warn' ? 'wn' : 'ok'}`} />{text}</button>;
 }
 
-// The big banner of the Media view: the newest thing in your library.
+// The banner of the Media view: what was just added to your library, as a Cover Flow, newest in front.
 function Hero({ w, active, onOpenTitle }) {
   const { data } = useWidget(w, active);
-  const it = data?.items?.[0];
-  if (!it) return null;
-  return (
-    <button className="hhero" onClick={() => onOpenTitle(it)}>
-      <small>Just added</small>
-      <b>{it.title}{it.year ? ` (${it.year})` : ''}</b>
-      <span>{it.type === 'movie' ? 'Movie' : 'Series'} in your library</span>
-    </button>
-  );
+  const items = data?.items;
+  if (!items?.length) return null;
+  return <CoverFlow items={items} onOpen={onOpenTitle} label={w.title} />;
 }
 
-export default function Home({ active, onNavigate }) {
+export default function Home({ active, onNavigate, welcome }) {
   const { widgets, err } = useManifest();
   const [view, setView] = useState(readView);
   const [openChip, setOpenChip] = useState(null);
   const [title, setTitle] = useState(null); // a title from a poster, to open
   const [libOpen, setLibOpen] = useState(null);
+  const [find, setFind] = useState(''); // the search box: Enter looks it up in Discover
   const pick = (v) => { setView(v); setOpenChip(null); try { localStorage.setItem('homeView', v); } catch { /* ignore */ } };
   const openTitle = (r) => (r.inLibrary ? setLibOpen(r.inLibrary) : setTitle({ type: r.type, tmdbId: r.tmdbId }));
 
@@ -57,11 +54,28 @@ export default function Home({ active, onNavigate }) {
   const lists = rest.filter((w) => w.kind === 'list');
   const rows = rest.filter((w) => w.kind === 'posters');
   const common = { active, onNavigate, onOpenTitle: openTitle };
+  const canFind = widgets.some((w) => w.id === 'trending'); // Discover works through Overseerr
+  const search = (e) => {
+    e.preventDefault();
+    const q = find.trim();
+    if (q.length < 2) return;
+    onNavigate('discover', { q, at: Date.now() }); // `at` makes the same words typed again count as a new search
+    setFind('');
+  };
+
+  // under the status row, above what it leads to (the posters)
+  const searchBox = canFind && (
+        <form className="dsearch homesearch" role="search" onSubmit={search}>
+          <Icon name="search" size={18} />
+          <input placeholder="Search movies, series and people…" value={find} onChange={(e) => setFind(e.target.value)} autoComplete="off" aria-label="Search movies, series and people" />
+          {find && <button type="button" className="icon" aria-label="Clear" onClick={() => setFind('')}><Icon name="x" size={16} /></button>}
+        </form>
+  );
 
   return (
     <>
       <div className="homehead">
-        <h2 className="ptitle2">Home</h2>
+        <h2 className="ptitle2">{welcome?.trim() || 'Home'}</h2>
         <span className="spacer" />
         <button className="icon homegear" onClick={() => onNavigate('settings')} aria-label="Settings" title="Settings">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /><circle cx="9" cy="6" r="2" /><circle cx="15" cy="12" r="2" /><circle cx="9" cy="18" r="2" /></svg>
@@ -76,6 +90,7 @@ export default function Home({ active, onNavigate }) {
       {view === 'control' ? (
         <div className="hdash">
           {status && <WidgetView w={status} {...common} />}
+          {searchBox}
           {stats.length > 0 && <div className="hstats">{stats.map((w) => <WidgetView key={w.id} w={w} {...common} />)}</div>}
           {lists.length > 0 && <div className="hmasonry">{lists.map((w) => <div key={w.id} className="hitem"><WidgetView w={w} {...common} /></div>)}</div>}
           {rows.map((w) => <WidgetView key={w.id} w={w} {...common} />)}
@@ -87,9 +102,10 @@ export default function Home({ active, onNavigate }) {
               <Chip key={w.id} w={w} active={active} open={openChip === w.id} onClick={() => (w.kind === 'stat' && w.link ? onNavigate(w.link) : setOpenChip(openChip === w.id ? null : w.id))} />
             ))}
           </div>
+          {searchBox}
           {openChip && <div className="hopen"><WidgetView w={widgets.find((w) => w.id === openChip)} {...common} /></div>}
           {widgets.find((w) => w.id === 'recent') && <Hero w={widgets.find((w) => w.id === 'recent')} active={active} onOpenTitle={openTitle} />}
-          {widgets.filter((w) => w.media === 'row').map((w) => <WidgetView key={w.id} w={w} variant="row" {...common} />)}
+          {widgets.filter((w) => w.media === 'row' && w.id !== 'recent').map((w) => <WidgetView key={w.id} w={w} variant="row" {...common} />)}
         </>
       )}
 
