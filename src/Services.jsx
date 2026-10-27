@@ -7,7 +7,7 @@ const INFO = { radarr: ['Radarr', 7878], sonarr: ['Sonarr', 8989], overseerr: ['
 const HINTS = {
   radarr: 'Your movie libraries. Required for movies: titles appear on the Library page with their ratings, files and tags, and clean-up unmonitors them here and removes the files. Add one entry per instance, for example separate 1080p and 4K servers.',
   sonarr: 'Your TV libraries. Required for shows: titles appear on the Library page with their seasons, episodes and ratings, and clean-up unmonitors them here and removes the files. Add one entry per instance.',
-  overseerr: 'Requests. Used to clear a title\'s requests when it is removed, so it stops showing as available. Requesting new media will be added here.',
+  overseerr: 'Requests. Used to clear a title\'s requests when it is removed, so it stops showing as available. Also used to request new media (HD or 4K) and to cancel requests from Discover.',
   qbittorrent: 'Downloads. Used to remove a title\'s torrents together with their data during clean-up, so hardlinked or seeding copies don\'t keep using disk space.',
   prowlarr: 'Connection test only. The delete workflow never uses Prowlarr.',
   tautulli: 'Last watched and play counts across every Plex user. Preferred over Plex for watch history.',

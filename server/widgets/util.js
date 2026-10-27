@@ -17,7 +17,8 @@ export function fmtBytes(n) {
 // A library title as a poster card. Fields match what TitleCard shows; `badge` is optional text on the poster.
 export const posterOf = (i, badge) => ({
   tmdbId: Number.isInteger(i.tmdbId) ? i.tmdbId : 0, type: i.type, title: str(i.title, 200), year: Number.isInteger(i.year) ? i.year : null,
-  poster: httpUrl(i.poster), rating: typeof i.rating === 'number' ? i.rating : null, status: null, inLibrary: i.key, ...(badge ? { badge } : {}),
+  poster: httpUrl(i.poster), backdrop: httpUrl(i.backdrop), overview: str(i.overview, 300), genres: Array.isArray(i.genres) ? i.genres.slice(0, 3).map((g) => str(g, 30)).filter(Boolean) : [],
+  rating: typeof i.rating === 'number' ? i.rating : null, status: null, inLibrary: i.key, onDisk: !!i.hasFile, ...(badge ? { badge } : {}),
 });
 
 // "1h 20m", "12m", "3d 4h": a duration in seconds, rounded to what is worth reading. Zero or nonsense gives ''.

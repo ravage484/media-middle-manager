@@ -21,15 +21,28 @@ export function shapeResult(r) {
   if (!type || !title || !tmdbId) return null;
   return {
     tmdbId, type, title, year: yearOf(r),
-    poster: image(r.posterPath, 'w342'),
+    poster: image(r.posterPath, 'w342'), backdrop: image(r.backdropPath, 'w780'),
     rating: num(r.voteAverage) > 0 ? Math.round(r.voteAverage * 10) / 10 : null,
     overview: text(r.overview, 400),
     status: mediaStatus(r.mediaInfo),
   };
 }
 
+// The people of a title (Overseerr's credits.cast): name, part and a photo address, in billing order.
+export const shapeCast = (list, max = 20) => (Array.isArray(list) ? list : []).slice(0, max).map((c) => ({
+  id: id(c?.id), name: text(c?.name, 80), character: text(c?.character, 80), photo: image(c?.profilePath, 'w185'),
+})).filter((c) => c.name);
+
+// The people in a search: Overseerr lists them among the titles, as mediaType "person". `character` carries what they are known for
+// (Acting, Directing...), so a person shows the same way a cast member does.
+export const shapePeople = (list, max = 12) => (Array.isArray(list) ? list : []).filter((p) => p?.mediaType === 'person').slice(0, max).map((p) => ({
+  id: id(p?.id), name: text(p?.name, 80), character: text(p?.knownForDepartment, 40), photo: image(p?.profilePath, 'w185'),
+})).filter((p) => p.id && p.name);
+
 export const shapeResults = (list) => (Array.isArray(list) ? list : []).map(shapeResult).filter(Boolean);
 
-// type:tmdbId -> the key of that title in your library, so a result can say "In library" and open it.
-export const libraryIndex = (items) => new Map(items.filter((i) => i.tmdbId).map((i) => [`${i.type}:${i.tmdbId}`, i.key]));
-export const withLibrary = (results, have) => results.map((r) => ({ ...r, inLibrary: have.get(`${r.type}:${r.tmdbId}`) || null }));
+// type:tmdbId -> the key of that title in your library (so a result can open it) and whether any of it is on disk (a requested title is
+// in Radarr or Sonarr too, before anything is downloaded).
+export const libraryIndex = (items) => new Map(items.filter((i) => i.tmdbId).map((i) => [`${i.type}:${i.tmdbId}`, { key: i.key, onDisk: !!i.hasFile }]));
+export const inLibraryOf = (have, type, tmdbId) => { const h = have.get(`${type}:${tmdbId}`); return { inLibrary: h?.key || null, onDisk: !!h?.onDisk }; };
+export const withLibrary = (results, have) => results.map((r) => ({ ...r, ...inLibraryOf(have, r.type, r.tmdbId) }));

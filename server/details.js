@@ -97,6 +97,9 @@ export async function getDetails(key) {
         if (m.ratings?.length) merged.ratings = m.ratings;
         setKeywords(item.key, m.keywords); // opening a title also refreshes its cached keywords
         merged.keywords = m.keywords; merged.countries = m.countries; merged.providers = m.providers; merged.region = REGION;
+        if (m.cast?.length) merged.cast = m.cast;
+        // Radarr or Sonarr may not know the IMDb id; Overseerr usually does
+        if (m.imdbId && !(merged.links || []).some((l) => l.label === 'IMDb')) merged.links = [{ label: 'IMDb', url: `https://www.imdb.com/title/${m.imdbId}/` }, ...(merged.links || [])];
       }
     } catch (e) {
       errors.push(`${overseerr.name}: ${e.message}`);
@@ -104,5 +107,7 @@ export async function getDetails(key) {
       if (cached) merged.keywords = cached;
     }
   }
+  // every title window offers TMDB, whatever the services could tell
+  if (item.tmdbId && !(merged.links || []).some((l) => l.label === 'TMDB')) merged.links = [...(merged.links || []), { label: 'TMDB', url: `https://www.themoviedb.org/${isShow ? 'tv' : 'movie'}/${item.tmdbId}` }];
   return { key, ...merged, errors };
 }

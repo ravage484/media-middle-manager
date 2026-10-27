@@ -127,8 +127,8 @@ export function RowList({ rows, empty, onAction, onOpen, onGo }) {
                 : <div className="wopen">{main}</div>}
             {r.badge && <Badge b={r.badge} onGo={r.go ? () => onGo(r.go) : undefined} />}
             {typeof r.progress === 'number' && <div className="wbar"><i style={{ width: `${Math.round(r.progress * 100)}%` }} /></div>}
-            {(r.right || r.when) && <small className="wright">{r.right || fmtDay(r.when)}</small>}
-            {r.right && r.when && <small className="wright">{fmtDay(r.when)}</small>}
+            {(r.right || r.when) && <small className="wright">{r.right || fmtDay(r.when, r.whenIsDay)}</small>}
+            {r.right && r.when && <small className="wright">{fmtDay(r.when, r.whenIsDay)}</small>}
             {r.actions?.map((a) => <ConfirmButton key={a.id} label={a.label} onConfirm={() => onAction(a.id, r.id)} />)}
           </li>
         );

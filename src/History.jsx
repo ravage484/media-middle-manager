@@ -55,7 +55,11 @@ export default function History() {
   return (
     <>
       <div className="toolbar historybar">
-        <input className="search" placeholder="Search titles and file paths…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <div className="dsearch toolbarsearch">
+          <Icon name="search" size={18} />
+          <input placeholder="Search titles and file paths…" value={q} onChange={(e) => setQ(e.target.value)} autoComplete="off" aria-label="Search titles and file paths" />
+          {q && <button className="icon" aria-label="Clear search" onClick={() => setQ('')}><Icon name="x" size={16} /></button>}
+        </div>
         <div className="seg small">
           {TYPES.map(([t, l]) => <button key={t} className={types.has(t) ? 'active' : ''} aria-pressed={types.has(t)} onClick={() => flip(t)}>{l}</button>)}
         </div>

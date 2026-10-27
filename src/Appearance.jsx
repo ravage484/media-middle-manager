@@ -1,24 +1,33 @@
 ﻿import { useEffect } from 'react';
 import Logo from './Logo.jsx';
-import { THEMES, LOGO_STYLES, FONTS } from './themes.js';
+import { THEMES, LOGO_STYLES, FONTS, WELCOME_MAX, isLight } from './themes.js';
 
 export default function Appearance({ appearance, setAppearance }) {
-  const { theme, logo, font } = appearance;
+  const { theme, logo, font, welcome = '' } = appearance;
   useEffect(() => { FONTS.forEach((f) => f.load?.().catch(() => {})); }, []); // so each tile previews in its own font
   const pick = (patch) => setAppearance({ ...appearance, ...patch });
+  const tile = (t) => (
+    <button key={t.id} className={`choice ${t.id === theme ? 'on' : ''}`} onClick={() => pick({ theme: t.id })}
+      style={{ background: t.bg, color: t.text, borderColor: t.id === theme ? t.accent : t.panel2 }}>
+      <Logo style={logo} theme={t.id} size={44} />
+      <b>{t.name}</b>
+      <span className="swatches">{[t.bg, t.panel, t.accent, t.accent2].map((c) => <i key={c} style={{ background: c, borderColor: t.panel2 }} />)}</span>
+    </button>
+  );
   return (
     <div className="appearance">
-      <h3>Theme</h3>
-      <div className="tiles">
-        {THEMES.map((t) => (
-          <button key={t.id} className={`choice ${t.id === theme ? 'on' : ''}`} onClick={() => pick({ theme: t.id })}
-            style={{ background: t.bg, color: t.text, borderColor: t.id === theme ? t.accent : t.panel2 }}>
-            <Logo style={logo} theme={t.id} size={44} />
-            <b>{t.name}</b>
-            <span className="swatches">{[t.bg, t.panel, t.accent, t.accent2].map((c) => <i key={c} style={{ background: c, borderColor: t.panel2 }} />)}</span>
-          </button>
-        ))}
+      <h3>Welcome message</h3>
+      <p className="dim">Replaces the "Home" heading at the top of the home page. Leave it empty to keep "Home".</p>
+      <div className="welcome">
+        <input value={welcome} maxLength={WELCOME_MAX} placeholder="Home" aria-label="Welcome message" onChange={(e) => pick({ welcome: e.target.value })} />
+        {welcome && <button onClick={() => pick({ welcome: '' })}>Reset</button>}
       </div>
+
+      <h3>Dark themes</h3>
+      <div className="tiles">{THEMES.filter((t) => !isLight(t)).map(tile)}</div>
+
+      <h3>Light themes</h3>
+      <div className="tiles">{THEMES.filter(isLight).map(tile)}</div>
 
       <h3>Logo style</h3>
       <div className="tiles">
