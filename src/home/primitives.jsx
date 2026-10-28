@@ -125,6 +125,7 @@ export function RowList({ rows, empty, onAction, onOpen, onGo }) {
               ? <button className="wopen" onClick={() => onOpen(r.open)} title={r.open.inLibrary ? 'Open in your library' : 'Look it up'}>{main}</button>
               : r.go ? <button className="wopen" onClick={() => onGo(r.go)} title="Show what is on it in the Library, biggest first">{main}</button>
                 : <div className="wopen">{main}</div>}
+            {r.chip && <Badge b={r.chip} />}
             {r.badge && <Badge b={r.badge} onGo={r.go ? () => onGo(r.go) : undefined} />}
             {typeof r.progress === 'number' && <div className="wbar"><i style={{ width: `${Math.round(r.progress * 100)}%` }} /></div>}
             {(r.right || r.when) && <small className="wright">{r.right || fmtDay(r.when, r.whenIsDay)}</small>}

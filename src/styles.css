@@ -325,7 +325,7 @@ td.rowbtns .icon + .icon { margin-left: 4px; }
 .rcard:hover .rposter { outline-color: var(--accent); }
 .rposter img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .rbadge { position: absolute; left: 6px; bottom: 6px; font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 99px; color: #fff; background: #4b5563; }
-.rbadge.ok { background: #16a34a; } .rbadge.warn { background: #d97706; }
+.rbadge.ok { background: #16a34a; } .rbadge.warn { background: #d97706; } .rbadge.bad { background: #dc2626; }
 .rrate { position: absolute; right: 6px; top: 6px; font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 6px; background: #000a; color: #fff; }
 .rmore { flex: 0 0 90px; align-self: center; border: 1px dashed var(--panel2); border-radius: 8px; padding: 12px 8px; text-align: center; color: var(--dim); }
 .ccard { flex: 0 0 96px; display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; color: var(--text); text-decoration: none; }

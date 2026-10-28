@@ -110,14 +110,14 @@ export function logoSvg(style, th) {
 /* ---------- apply + persist ---------- */
 const KEY = 'appearance';
 export const WELCOME_MAX = 60;
-export const DEFAULT = { theme: 'indigo', logo: 'classic', font: 'system', welcome: '' }; // welcome: the Home heading; empty keeps "Home"
+export const DEFAULT = { theme: 'indigo', logo: 'classic', font: 'system', welcome: '', showAdult: false }; // showAdult: list adult titles in Discover and Home; welcome: the Home heading; empty keeps "Home"
 
 export function loadAppearance() {
   try {
     const a = JSON.parse(localStorage.getItem(KEY));
     if (a && RENAMED[a.theme]) a.theme = RENAMED[a.theme];
     if (THEMES.some((x) => x.id === a?.theme) && LOGO_STYLES.some(([id]) => id === a?.logo)) {
-      return { ...a, font: FONTS.some((f) => f.id === a.font) ? a.font : DEFAULT.font, welcome: typeof a.welcome === 'string' ? a.welcome.slice(0, WELCOME_MAX) : '' };
+      return { ...a, font: FONTS.some((f) => f.id === a.font) ? a.font : DEFAULT.font, welcome: typeof a.welcome === 'string' ? a.welcome.slice(0, WELCOME_MAX) : '', showAdult: a.showAdult === true };
     }
   } catch { /* ignore */ }
   return DEFAULT;

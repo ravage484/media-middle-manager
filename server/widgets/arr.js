@@ -9,14 +9,25 @@ const ymd = (d) => d.toISOString().slice(0, 10);
 const label = (state) => ({ importBlocked: 'Import blocked', importPending: 'Waiting to import', importing: 'Importing', downloading: 'Downloading', downloadFailed: 'Download failed' }[state] || str(state, 30) || 'Queued');
 const sxe = (s, e) => `S${String(Number.isInteger(s) ? s : 0).padStart(2, '0')}E${String(Number.isInteger(e) ? e : 0).padStart(2, '0')}`;
 
-// Seconds left per torrent (by lower-case hash) from every qBittorrent; empty when there is none or it cannot be reached.
-async function torrentEtas() {
+// Seconds left and last activity (unix seconds) per torrent, by lower-case hash, from every qBittorrent; empty when there is none or
+// it cannot be reached.
+async function torrentInfo() {
   const map = new Map();
   await Promise.all(getServices().filter((s) => s.type === 'qbittorrent').map(async (s) => {
-    try { for (const t of await qb(s, '/api/v2/torrents/info?filter=downloading')) map.set(String(t.hash).toLowerCase(), t.eta); } catch { /* optional */ }
+    try { for (const t of await qb(s, '/api/v2/torrents/info?filter=downloading')) map.set(String(t.hash).toLowerCase(), { eta: t.eta, active: t.last_activity, stalled: t.state === 'stalledDL' }); } catch { /* optional */ }
   }));
   return map;
 }
+
+// Fallback for downloads qBittorrent does not report: when each queue item last moved (id -> { left, since }); one whose bytes left
+// have not changed for a day is stalled. Lives in memory, so a restart starts the clock again.
+const STALLED_MS = 24 * 3600000;
+const moved = new Map();
+const stalledFor = (id, left, now = Date.now()) => {
+  const m = moved.get(id);
+  if (!m || m.left !== left) { moved.set(id, { left, since: now }); return false; }
+  return left > 0 && now - m.since >= STALLED_MS;
+};
 
 export default {
   type: 'arr', name: 'Radarr and Sonarr',
@@ -25,8 +36,9 @@ export default {
       id: 'queue', title: 'Download queue', kind: 'list', requires: ['radarr', 'sonarr'], refresh: 10, order: 21, control: { span: 2 }, media: 'chip',
       fetch: async () => {
         const rows = [];
+        const seen = new Set();
         const idx = await titleIndex();
-        const etas = await torrentEtas(); // qBittorrent knows the time left when the *arr does not
+        const torrents = await torrentInfo(); // qBittorrent knows the time left, and when it last moved, when the *arr does not
         await Promise.all(arr().map(async (svc) => {
           const movie = svc.type === 'radarr';
           const q = await api(svc, `/api/v3/queue?page=1&pageSize=20&${movie ? 'includeMovie=true' : 'includeSeries=true&includeEpisode=true'}`);
@@ -35,8 +47,12 @@ export default {
             const ep = r.episode && Number.isInteger(r.episode.seasonNumber) ? ` ${sxe(r.episode.seasonNumber, r.episode.episodeNumber)}` : '';
             const left = typeof r.sizeleft === 'number' ? r.sizeleft : 0;
             const size = typeof r.size === 'number' ? r.size : 0;
-            const bad = r.trackedDownloadStatus === 'warning' || r.trackedDownloadStatus === 'error';
-            const eta = fmtEta(timeleftSec(r.timeleft)) || fmtEta(etas.get(String(r.downloadId || '').toLowerCase()));
+            const rid = `${svc.id}:${int(r.id)}`;
+            seen.add(rid);
+            const tor = torrents.get(String(r.downloadId || '').toLowerCase());
+            const stalled = Number.isInteger(tor?.active) && tor.active > 0 ? left > 0 && Date.now() - tor.active * 1000 >= STALLED_MS : stalledFor(rid, left);
+            const bad = stalled || r.trackedDownloadStatus === 'warning' || r.trackedDownloadStatus === 'error';
+            const eta = fmtEta(timeleftSec(r.timeleft)) || fmtEta(tor?.eta);
             const t = movie ? r.movie : r.series;
             const why = (Array.isArray(r.statusMessages) ? r.statusMessages : []).flatMap((m) => (Array.isArray(m?.messages) ? m.messages : [])).map((m) => str(m, 160)).filter(Boolean)[0] || str(r.errorMessage, 160);
             rows.push({
@@ -45,10 +61,12 @@ export default {
               progress: size > 0 ? pct(1 - left / size) : 0, right: [left > 0 ? `${fmtBytes(left)} left` : fmtBytes(size), eta && left > 0 ? `~${eta}` : ''].filter(Boolean).join(' · '),
               ...titleRef(idx, { type: movie ? 'movie' : 'show', tmdbId: int(t?.tmdbId), tvdbId: int(t?.tvdbId), title: t?.title, year: int(t?.year), poster: posterIn(t?.images) }),
               // the badge goes to where the problem is shown and can be fixed: the queue page of the service that holds the download
-              ...(bad ? { badge: { text: 'Needs attention', tone: 'warn', href: httpUrl(`${svc.url.replace(/\/+$/, '')}/activity/queue`), hint: why || `Open ${svc.name}` } } : {}),
+              ...(tor?.stalled ? { chip: { text: 'Stalled', tone: 'bad', hint: 'qBittorrent reports no data moving' } } : {}),
+              ...(bad ? { badge: { text: 'Needs attention', tone: 'warn', href: httpUrl(`${svc.url.replace(/\/+$/, '')}/activity/queue`), hint: why || (stalled ? `No progress for over 24 hours: open ${svc.name}` : `Open ${svc.name}`) } } : {}),
             });
           }
         }));
+        for (const k of moved.keys()) if (!seen.has(k)) moved.delete(k); // finished or removed
         return { rows: rows.slice(0, 8), empty: 'Nothing is downloading.', chip: rows.length ? `${rows.length} downloading` : '' };
       },
     },

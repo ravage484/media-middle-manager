@@ -10,6 +10,9 @@ export const image = (path, size) => (typeof path === 'string' && IMG_RE.test(pa
 export const id = (v) => (Number.isInteger(v) && v >= 1 && v <= 999999999 ? v : null);
 const yearOf = (r) => { const y = /^(\d{4})/.exec(String(r?.releaseDate ?? r?.firstAirDate ?? ''))?.[1]; return y ? Number(y) : null; };
 
+// Has it come out yet? (Its release or first air date is today or earlier.) A requested title that has not is simply waiting.
+export const isReleased = (r) => { const d = String(r?.releaseDate ?? r?.firstAirDate ?? ''); return /^\d{4}-\d{2}-\d{2}/.test(d) && d.slice(0, 10) <= new Date().toISOString().slice(0, 10); };
+
 // Overseerr's media status: 2 pending, 3 processing, 4 partially available, 5 available.
 export const mediaStatus = (info) => (info && Number.isInteger(info.status) && info.status >= 1 && info.status <= 6 ? info.status : null);
 
@@ -24,7 +27,8 @@ export function shapeResult(r) {
     poster: image(r.posterPath, 'w342'), backdrop: image(r.backdropPath, 'w780'),
     rating: num(r.voteAverage) > 0 ? Math.round(r.voteAverage * 10) / 10 : null,
     overview: text(r.overview, 400),
-    status: mediaStatus(r.mediaInfo),
+    status: mediaStatus(r.mediaInfo), released: isReleased(r),
+    adult: r.adult === true, // TMDB's adult flag: the app hides these unless the user turns them on
   };
 }
 

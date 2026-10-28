@@ -7,7 +7,7 @@ import Discover from './Discover.jsx';
 import Stale from './Stale.jsx';
 import Login from './Login.jsx';
 import Logo from './Logo.jsx';
-import { api } from './api.js';
+import { api, setShowAdult } from './api.js';
 import { applyAppearance, loadAppearance } from './themes.js';
 import { VERSION } from './version.js';
 
@@ -58,7 +58,11 @@ function Shell({ auth, onSignOut }) {
   const navigate = (id, opts) => { if (id === 'library' && opts) setLibPreset(opts); if (id === 'discover' && opts) setFindPreset(opts); go(id); };
   const [collapsed, setCollapsed] = useState(read);
   const [appearance, setAppearanceState] = useState(loadAppearance);
-  const setAppearance = (a) => { applyAppearance(a); setAppearanceState(a); };
+  setShowAdult(appearance.showAdult); // before the tabs fetch anything
+  const setAppearance = (a) => {
+    applyAppearance(a); setAppearanceState(a);
+    if (!!a.showAdult !== !!appearance.showAdult) window.location.reload(); // lists already loaded were filtered the old way
+  };
   useEffect(() => { try { localStorage.setItem('navCollapsed', collapsed ? '1' : '0'); } catch { /* ignore */ } }, [collapsed]);
 
   return (
