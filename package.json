@@ -1,7 +1,7 @@
 {
   "name": "media-middle-manager",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "One place to browse and manage your media stack: Radarr, Sonarr, Overseerr, qBittorrent, Tautulli, Plex and Tdarr.",
   "type": "module",
   "scripts": {
