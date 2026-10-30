@@ -32,7 +32,7 @@ export default function WidgetView({ w, active, variant = 'card', onNavigate, on
   return (
     <WidgetFrame title={w.title} link={w.link} onLink={go} onReload={reload} loading={loading} error={error} stale={!!error && !!data}>
       {!data && !error && <Skeleton />}
-      {data && w.kind === 'list' && <RowList rows={data.rows} empty={data.empty} onOpen={onOpenTitle} onGo={(g) => onNavigate('library', { drive: g.drive, sort: 'size', desc: true })} onAction={(action, id) => widgetAction(w.id, action, id).catch((e) => window.alert(e.message))} />}
+      {data && w.kind === 'list' && <RowList rows={data.rows} fold={data.fold} empty={data.empty} onOpen={onOpenTitle} onGo={(g) => onNavigate('library', { drive: g.drive, sort: 'size', desc: true })} onAction={(action, id) => widgetAction(w.id, action, id).catch((e) => window.alert(e.message))} />}
       {data && w.kind === 'posters' && <PosterRow items={data.items} onOpen={onOpenTitle} />}
       {at > 0 && <small className="wat">Updated {new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</small>}
     </WidgetFrame>

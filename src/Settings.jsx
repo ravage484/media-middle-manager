@@ -9,7 +9,7 @@ import About from './About.jsx';
 
 const TABS = [['services', 'Services'], ['sync', 'Library sync'], ['appearance', 'Appearance'], ['delete', 'Delete defaults'], ['backup', 'Import / Export'], ['account', 'Account'], ['about', 'About']];
 
-export default function Settings({ appearance, setAppearance, auth, onSignOut }) {
+export default function Settings({ appearance, setAppearance, showAdult, setShowAdult, auth, onSignOut }) {
   const [tab, setTab] = useState('services');
   return (
     <div className="settings">
@@ -25,7 +25,7 @@ export default function Settings({ appearance, setAppearance, auth, onSignOut })
       {tab === 'delete' && <DeleteDefaults />}
       {tab === 'backup' && <ImportExport />}
       {tab === 'about' && <About />}
-      {tab === 'account' && <Account auth={auth} onSignOut={onSignOut} />}
+      {tab === 'account' && <Account auth={auth} onSignOut={onSignOut} showAdult={showAdult} setShowAdult={setShowAdult} />}
     </div>
   );
 }

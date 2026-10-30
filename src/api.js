@@ -7,24 +7,15 @@ const j = async (r) => {
 const send = (method, url, body) =>
   fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(j);
 
-// Adult titles (TMDB's flag) are dropped from every list unless the user turned them on; App keeps this in step with the preference.
-let showAdult = false;
-export const setShowAdult = (v) => { showAdult = v === true; };
-const LISTS = ['results', 'items', 'credits'];
-const sfw = (d) => {
-  if (showAdult || !d || typeof d !== 'object') return d;
-  const out = { ...d };
-  for (const k of LISTS) if (Array.isArray(d[k])) out[k] = d[k].filter((r) => !r?.adult);
-  return out;
-};
-const jf = (r) => j(r).then(sfw);
-
 export const api = {
   authStatus: () => fetch('/api/auth/status').then(j),
   setup: (username, password) => send('POST', '/api/auth/setup', { username, password }),
   login: (username, password) => send('POST', '/api/auth/login', { username, password }),
   logout: () => send('POST', '/api/auth/logout', {}),
   changePassword: (current, next) => send('POST', '/api/auth/password', { current, next }),
+  downloads: () => fetch('/api/downloads').then(j),
+  prefs: () => fetch('/api/prefs').then(j),
+  savePrefs: (patch) => send('PUT', '/api/prefs', patch),
   library: (refresh) => fetch('/api/library' + (refresh ? '?refresh=1' : '')).then(j),
   services: () => fetch('/api/services').then(j),
   saveServices: (s) => send('PUT', '/api/services', s),
@@ -39,20 +30,20 @@ export const api = {
   details: (key) => fetch(`/api/details?key=${encodeURIComponent(key)}`).then(j),
   plexItem: (key) => fetch(`/api/plex/item?key=${encodeURIComponent(key)}`).then(j),
   plexAct: (key, body) => send('POST', '/api/plex/act', { key, ...body }),
-  discover: (params) => fetch(`/api/discover?${new URLSearchParams(params)}`).then(jf),
-  discoverSearch: (q, page) => fetch(`/api/discover/search?${new URLSearchParams({ q, page })}`).then(jf),
+  discover: (params) => fetch(`/api/discover?${new URLSearchParams(params)}`).then(j),
+  discoverSearch: (q, page) => fetch(`/api/discover/search?${new URLSearchParams({ q, page })}`).then(j),
   discoverGenres: (type) => fetch(`/api/discover/genres?type=${type}`).then(j),
   libraryPerson: (id) => fetch(`/api/library/person?${new URLSearchParams({ id })}`).then(j),
-  discoverPerson: (id) => fetch(`/api/discover/person?${new URLSearchParams({ id })}`).then(jf),
+  discoverPerson: (id) => fetch(`/api/discover/person?${new URLSearchParams({ id })}`).then(j),
   discoverTitle: (type, id) => fetch(`/api/discover/title?${new URLSearchParams({ type, id })}`).then(j),
   discoverRequest: (body) => send('POST', '/api/discover/request', body),
   discoverUnrequest: (requestId) => send('POST', '/api/discover/unrequest', { requestId }),
   widgets: () => fetch('/api/widgets').then(j),
-  widgetData: (id) => fetch(`/api/widgets/data?id=${encodeURIComponent(id)}`).then(jf),
+  widgetData: (id) => fetch(`/api/widgets/data?id=${encodeURIComponent(id)}`).then(j),
   widgetAction: (id, action, arg) => send('POST', '/api/widgets/action', { id, action, arg }),
   keepList: () => fetch('/api/keep').then(j),
   keepSet: (keys, keep) => send('POST', '/api/keep', { keys, keep }),
-  recommendations: (key, kind, page) => fetch(`/api/recommendations?key=${encodeURIComponent(key)}&kind=${kind}&page=${page}`).then(jf),
+  recommendations: (key, kind, page) => fetch(`/api/recommendations?key=${encodeURIComponent(key)}&kind=${kind}&page=${page}`).then(j),
   plexCache: () => fetch('/api/plex/cache').then(j),
   plexSync: () => send('POST', '/api/plex/sync', {}),
   keywords: () => fetch('/api/keywords').then(j),

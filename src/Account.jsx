@@ -1,19 +1,32 @@
 import { useState } from 'react';
 import { api } from './api.js';
 
-export default function Account({ auth, onSignOut }) {
+export default function Account({ auth, onSignOut, showAdult, setShowAdult }) {
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
   const [msg, setMsg] = useState(null);
   const [busy, setBusy] = useState(false);
 
+  const content = (
+    <section className="sgroup">
+      <h3>Content</h3>
+      <label className="check">
+        <input type="checkbox" checked={showAdult} onChange={(e) => setShowAdult(e.target.checked)} /> Show adult content in Discover, search and Home
+      </label>
+      <small className="dim">Hidden by default. Covers titles TMDB marks as adult and nudity compilations that are not marked. Saved to your account; the page reloads.</small>
+    </section>
+  );
+
   if (auth.authDisabled) {
     return (
-      <section className="sgroup">
-        <h3>Account</h3>
-        <div className="notice bad">Sign-in is turned off for this server (<code>MMM_AUTH_DISABLED=true</code>). Anyone who can reach it can manage your media stack and delete files, so only do this behind a proxy that authenticates users.</div>
-      </section>
+      <div>
+        {content}
+        <section className="sgroup">
+          <h3>Account</h3>
+          <div className="notice bad">Sign-in is turned off for this server (<code>MMM_AUTH_DISABLED=true</code>). Anyone who can reach it can manage your media stack and delete files, so only do this behind a proxy that authenticates users.</div>
+        </section>
+      </div>
     );
   }
 
@@ -32,6 +45,7 @@ export default function Account({ auth, onSignOut }) {
 
   return (
     <div>
+      {content}
       <section className="sgroup">
         <h3>Account</h3>
         <p className="dim">Signed in as <b>{auth.username}</b>.</p>

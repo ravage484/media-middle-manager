@@ -7,8 +7,8 @@ import Discover from './Discover.jsx';
 import Stale from './Stale.jsx';
 import Login from './Login.jsx';
 import Logo from './Logo.jsx';
-import { api, setShowAdult } from './api.js';
-import { applyAppearance, loadAppearance } from './themes.js';
+import { api } from './api.js';
+import { applyAppearance, loadAppearance, normalizeAppearance } from './themes.js';
 import { VERSION } from './version.js';
 
 const Icon = ({ children }) => (
@@ -49,7 +49,27 @@ export default function App() {
   return <Shell auth={auth} onSignOut={signOut} />;
 }
 
+// Your preferences live on the server (they follow you to any browser), so nothing is drawn until they are here: the first lists must
+// already be filtered the way you chose.
 function Shell({ auth, onSignOut }) {
+  const [prefs, setPrefs] = useState(null);
+  useEffect(() => {
+    let live = true;
+    api.prefs().then((p) => {
+      let appearance = normalizeAppearance(p.appearance);
+      if (!appearance) { // first time on the server: hand over what this browser had
+        appearance = loadAppearance();
+        api.savePrefs({ appearance }).catch(() => { /* saved with the next change */ });
+      }
+      if (live) setPrefs({ appearance, showAdult: p.showAdult === true });
+    }).catch(() => live && setPrefs({ appearance: loadAppearance(), showAdult: false })); // server unreachable: keep going with what this browser has
+    return () => { live = false; };
+  }, []);
+  if (!prefs) return <div className="loginpage"><p className="dim">Loading…</p></div>;
+  return <Main auth={auth} onSignOut={onSignOut} initial={prefs} />;
+}
+
+function Main({ auth, onSignOut, initial }) {
   const [tab, setTab] = useState('home');
   const [visited, setVisited] = useState(new Set(['home', 'library'])); // tabs keep their state once opened
   const go = (id) => { setTab(id); setVisited((v) => (v.has(id) ? v : new Set(v).add(id))); };
@@ -57,11 +77,17 @@ function Shell({ auth, onSignOut }) {
   const [findPreset, setFindPreset] = useState(null); // what Home's search box asked Discover to look for
   const navigate = (id, opts) => { if (id === 'library' && opts) setLibPreset(opts); if (id === 'discover' && opts) setFindPreset(opts); go(id); };
   const [collapsed, setCollapsed] = useState(read);
-  const [appearance, setAppearanceState] = useState(loadAppearance);
-  setShowAdult(appearance.showAdult); // before the tabs fetch anything
+  const [appearance, setAppearanceState] = useState(initial.appearance);
+  const [showAdult, setShowAdultState] = useState(initial.showAdult);
+  useEffect(() => { applyAppearance(initial.appearance); }, []); // eslint-disable-line react-hooks/exhaustive-deps -- once: the server's choice replaces this browser's copy
   const setAppearance = (a) => {
     applyAppearance(a); setAppearanceState(a);
-    if (!!a.showAdult !== !!appearance.showAdult) window.location.reload(); // lists already loaded were filtered the old way
+    api.savePrefs({ appearance: a }).catch((e) => window.alert(`Could not save your appearance: ${e.message}`));
+  };
+  const chooseAdult = async (v) => {
+    await api.savePrefs({ showAdult: v });
+    setShowAdultState(v);
+    window.location.reload(); // lists already loaded were filtered the old way
   };
   useEffect(() => { try { localStorage.setItem('navCollapsed', collapsed ? '1' : '0'); } catch { /* ignore */ } }, [collapsed]);
 
@@ -111,7 +137,7 @@ function Shell({ auth, onSignOut }) {
         {visited.has('discover') && <div hidden={tab !== 'discover'}><Discover goSettings={() => go('settings')} preset={findPreset} /></div>}
         {visited.has('stale') && <div hidden={tab !== 'stale'}><Stale /></div>}
         {tab === 'history' && <History />}
-        {tab === 'settings' && <Settings appearance={appearance} setAppearance={setAppearance} auth={auth} onSignOut={onSignOut} />}
+        {tab === 'settings' && <Settings appearance={appearance} setAppearance={setAppearance} showAdult={showAdult} setShowAdult={chooseAdult} auth={auth} onSignOut={onSignOut} />}
       </main>
     </div>
   );

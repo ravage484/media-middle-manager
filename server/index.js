@@ -13,6 +13,8 @@ import { browse, search as discoverSearch, genres as discoverGenres, titleDetail
 import { plexPayload, syncPlexData, refreshEntry, acceptPlexHook, plexTick } from './plexcache.js';
 import { keywordsPayload, startSync, stopSync, setAuto, getAuto, syncStatus, tick, acceptHook, hookToken } from './keywords.js';
 import { snapshot, restoreFrom, DATA, securityInfo } from './db.js';
+import { getPrefs, setPrefs } from './prefs.js';
+import { downloadStates } from './widgets/arr.js';
 import { authRoutes, requireAuth, sameOrigin, bootstrapAdmin, AUTH_DISABLED } from './auth.js';
 
 const { version: VERSION } = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
@@ -70,6 +72,14 @@ const unmask = (s, old) => {
     apiKey: s.apiKey === MASK ? prev.apiKey || '' : s.apiKey || '',
     password: s.password === MASK ? prev.password || '' : s.password || '',
   };
+};
+// Adult titles (see tmdb.js) are left out of lists unless this account turned them on (see prefs.js). Applied to what leaves the server,
+// so the cached lists stay whole and one account's choice never leaks into another's.
+const sfw = (req, d) => {
+  if (!d || typeof d !== 'object' || getPrefs(req).showAdult) return d;
+  const out = { ...d };
+  for (const k of ['results', 'items', 'credits']) if (Array.isArray(d[k])) out[k] = d[k].filter((r) => !r?.adult);
+  return out;
 };
 const asObject = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
 
@@ -164,18 +174,21 @@ app.post('/api/plex/act', wrap(async (req, res) => {
 
 // Discover (through Overseerr): browse, search, one title, and asking for it. Only the last one changes anything.
 const pageOf = (q) => Number(q.page || 1);
-app.get('/api/discover', wrap(async (req, res) => res.json(await browse({ section: String(req.query.section || ''), type: req.query.type, genre: Number(req.query.genre), page: pageOf(req.query) }))));
-app.get('/api/discover/search', wrap(async (req, res) => res.json(await discoverSearch(req.query.q, pageOf(req.query)))));
+app.get('/api/discover', wrap(async (req, res) => res.json(sfw(req, await browse({ section: String(req.query.section || ''), type: req.query.type, genre: Number(req.query.genre), page: pageOf(req.query) })))));
+app.get('/api/downloads', wrap(async (req, res) => res.json({ states: await downloadStates() })));
+app.get('/api/prefs', wrap(async (req, res) => res.json(getPrefs(req))));
+app.put('/api/prefs', wrap(async (req, res) => res.json(setPrefs(req, req.body))));
+app.get('/api/discover/search', wrap(async (req, res) => res.json(sfw(req, await discoverSearch(req.query.q, pageOf(req.query))))));
 app.get('/api/discover/genres', wrap(async (req, res) => res.json(await discoverGenres(req.query.type))));
 app.get('/api/discover/title', wrap(async (req, res) => res.json(await titleDetails(req.query.type, req.query.id))));
 app.get('/api/library/person', wrap(async (req, res) => res.json(await personLibrary(Number(req.query.id)))));
-app.get('/api/discover/person', wrap(async (req, res) => res.json(await personDetails(Number(req.query.id)))));
+app.get('/api/discover/person', wrap(async (req, res) => res.json(sfw(req, await personDetails(Number(req.query.id))))));
 app.post('/api/discover/request', wrap(async (req, res) => { const b = asObject(req.body); res.json(await requestTitle({ type: b.type, tmdbId: b.id, seasons: b.seasons, is4k: b.is4k })); }));
 app.post('/api/discover/unrequest', wrap(async (req, res) => { const b = asObject(req.body); res.json(await cancelRequest(b.requestId)); }));
 
 // Home widgets: what can be shown, the data for one, and the few things a widget may change (each named in its adapter).
 app.get('/api/widgets', (req, res) => res.json({ widgets: listWidgets() }));
-app.get('/api/widgets/data', wrap(async (req, res) => res.json(await widgetData(typeof req.query.id === 'string' ? req.query.id : ''))));
+app.get('/api/widgets/data', wrap(async (req, res) => { const r = await widgetData(typeof req.query.id === 'string' ? req.query.id : ''); res.json(r.data ? { ...r, data: sfw(req, r.data) } : r); }));
 app.post('/api/widgets/action', wrap(async (req, res) => { const b = asObject(req.body); res.json(await widgetAction(b.id, b.action, b.arg)); }));
 
 // Keep: titles the Stale list leaves alone.
@@ -185,7 +198,7 @@ app.post('/api/keep', wrap(async (req, res) => { const b = asObject(req.body); c
 // Recommendations / similar titles from Overseerr, for the bottom of a title's window.
 app.get('/api/recommendations', wrap(async (req, res) => {
   let key; try { key = cleanKeys([req.query.key])[0]; } catch { return bad(res, 'Expected a title'); }
-  res.json(await getRecommendations(key, String(req.query.kind || 'recommendations'), Number(req.query.page || 1)));
+  res.json(sfw(req, await getRecommendations(key, String(req.query.kind || 'recommendations'), Number(req.query.page || 1))));
 }));
 
 // Backdrop, ratings, dates and links for one title's window.

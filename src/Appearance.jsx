@@ -23,11 +23,6 @@ export default function Appearance({ appearance, setAppearance }) {
         {welcome && <button onClick={() => pick({ welcome: '' })}>Reset</button>}
       </div>
 
-      <h3>Adult content</h3>
-      <label className="check">
-        <input type="checkbox" checked={appearance.showAdult === true} onChange={(e) => pick({ showAdult: e.target.checked })} /> Show titles TMDB marks as adult in Discover, search and Home (the page reloads)
-      </label>
-
       <h3>Dark themes</h3>
       <div className="tiles">{THEMES.filter((t) => !isLight(t)).map(tile)}</div>
 

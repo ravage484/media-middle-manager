@@ -29,45 +29,107 @@ const stalledFor = (id, left, now = Date.now()) => {
   return left > 0 && now - m.since >= STALLED_MS;
 };
 
+// The download queue of every Radarr and Sonarr, one row per item. `attention` counts the rows that need a person: stalled, failed or
+// warned about. Shared by the queue list and the Needs attention tile, and kept for a few seconds so the two do not ask twice.
+let queueCache = { at: 0, promise: null };
+const queueData = () => {
+  if (queueCache.promise && Date.now() - queueCache.at < 5000) return queueCache.promise;
+  queueCache = { at: Date.now(), promise: buildQueue().catch((e) => { queueCache = { at: 0, promise: null }; throw e; }) };
+  return queueCache.promise;
+};
+
+// Takes an item out of its Radarr or Sonarr queue (and out of the download client). With blocklist the release is never picked again, so
+// the *arr looks for another one; without it the title is simply no longer waiting on this download.
+const dropFromQueue = ({ blocklist }) => async (arg) => {
+  const m = /^(.+):(\d{1,9}(?:,\d{1,9}){0,99})$/.exec(String(arg)); // a download is one or more queue records (a season pack has one per episode)
+  const svc = m && arr().find((x) => x.id === m[1]);
+  if (!svc) throw Object.assign(new Error('Unknown download'), { userError: true });
+  const ids = m[2].split(',').map(Number);
+  const flags = `removeFromClient=true&blocklist=${blocklist}&skipRedownload=${!blocklist}`;
+  if (ids.length === 1) await api(svc, `/api/v3/queue/${ids[0]}?${flags}`, { method: 'DELETE' });
+  else await api(svc, `/api/v3/queue/bulk?${flags}`, { method: 'DELETE', body: { ids } });
+  queueCache = { at: 0, promise: null }; // the list just changed
+};
+
+async function buildQueue() {
+  const rows = [];
+  const seen = new Set();
+  const idx = await titleIndex();
+  const torrents = await torrentInfo(); // qBittorrent knows the time left, and when it last moved, when the *arr does not
+  await Promise.all(arr().map(async (svc) => {
+    const movie = svc.type === 'radarr';
+    const q = await api(svc, `/api/v3/queue?page=1&pageSize=100&${movie ? 'includeMovie=true' : 'includeSeries=true&includeEpisode=true'}`);
+    // The *arr lists one record per episode, but a season pack is one download: every episode of it shares the download's id.
+    const downloads = new Map();
+    for (const r of Array.isArray(q?.records) ? q.records : []) {
+      if (!r || typeof r !== 'object' || !int(r.id)) continue;
+      const k = str(r.downloadId, 100) || `record:${r.id}`;
+      if (!downloads.has(k)) downloads.set(k, []);
+      downloads.get(k).push(r);
+    }
+    for (const recs of downloads.values()) {
+      recs.sort((x, y) => (x.episode?.seasonNumber ?? 0) - (y.episode?.seasonNumber ?? 0) || (x.episode?.episodeNumber ?? 0) - (y.episode?.episodeNumber ?? 0));
+      const r = recs[0]; // a pack's records all describe the whole download, so the first stands for it
+      const ids = recs.map((x) => int(x.id));
+      const rid = `${svc.id}:${ids.join(',')}`;
+      seen.add(rid);
+      const left = typeof r.sizeleft === 'number' ? r.sizeleft : 0;
+      const size = typeof r.size === 'number' ? r.size : 0;
+      const tor = torrents.get(String(r.downloadId || '').toLowerCase());
+      const stalled = Number.isInteger(tor?.active) && tor.active > 0 ? left > 0 && Date.now() - tor.active * 1000 >= STALLED_MS : stalledFor(rid, left);
+      const bad = stalled || recs.some((x) => x.trackedDownloadStatus === 'warning' || x.trackedDownloadStatus === 'error');
+      const eta = fmtEta(timeleftSec(r.timeleft)) || fmtEta(tor?.eta);
+      const t = movie ? r.movie : r.series;
+      const why = recs.flatMap((x) => (Array.isArray(x.statusMessages) ? x.statusMessages : [])).flatMap((m) => (Array.isArray(m?.messages) ? m.messages : [])).map((m) => str(m, 160)).filter(Boolean)[0] || str(r.errorMessage, 160);
+      const seasons = [...new Set(recs.map((x) => x.episode?.seasonNumber).filter(Number.isInteger))];
+      // one episode: "Show S02E03"; several: "Show S02" (or "S01, S02"), with the episodes listed under it
+      const what = movie ? '' : recs.length > 1
+        ? ` ${seasons.map((n) => `S${String(n).padStart(2, '0')}`).join(', ')}`
+        : r.episode && Number.isInteger(r.episode.seasonNumber) ? ` ${sxe(r.episode.seasonNumber, r.episode.episodeNumber)}` : '';
+      rows.push({
+        id: rid, state: stalled || tor?.stalled ? 'stalled' : bad ? 'attention' : 'downloading', title: str(movie ? r.movie?.title : `${r.series?.title || ''}${what}`, 120) || str(r.title, 120),
+        subtitle: label(r.trackedDownloadState) + (recs.length > 1 ? `, ${recs.length} episodes` : '') + (bad && why ? `: ${why}` : ''),
+        progress: size > 0 ? pct(1 - left / size) : 0, right: [left > 0 ? `${fmtBytes(left)} left` : fmtBytes(size), eta && left > 0 ? `~${eta}` : ''].filter(Boolean).join(' · '),
+        ...(recs.length > 1 ? { children: recs.slice(0, 100).map((x) => ({ id: `${svc.id}:${x.id}`, title: sxe(x.episode?.seasonNumber, x.episode?.episodeNumber), subtitle: str(x.episode?.title, 100) || label(x.trackedDownloadState) })) } : {}),
+        ...titleRef(idx, { type: movie ? 'movie' : 'show', tmdbId: int(t?.tmdbId), tvdbId: int(t?.tvdbId), title: t?.title, year: int(t?.year), poster: posterIn(t?.images) }),
+        ...(tor?.stalled ? { chip: { text: 'Stalled', tone: 'bad', hint: 'qBittorrent reports no data moving' } } : {}),
+        ...(bad ? {
+          badge: { text: 'Needs attention', tone: 'warn', hint: why || (stalled ? 'No progress for over 24 hours' : 'Click for options') },
+          // what the chip or badge opens: what is wrong, the choices, and where the service shows it
+          manage: { why: why || (stalled ? 'No progress for over 24 hours.' : ''), service: svc.name, href: httpUrl(`${svc.url.replace(/\/+$/, '')}/activity/queue`), actions: [{ id: 'retry', label: 'Blocklist & retry', hint: 'Remove it and never pick this release again, so another one is searched for' }, { id: 'remove', label: 'Remove', hint: 'Take it out of the queue and the download client' }] },
+        } : {}),
+      });
+    }
+  }));
+  for (const k of moved.keys()) if (!seen.has(k)) moved.delete(k); // finished or removed
+  rows.sort((a, b) => !!b.badge - !!a.badge); // what needs a person first, so it is never cut off the end of the list
+  // library key -> how its download stands, the worst of its items (a show can have several): for the rest of the app to show
+  const rank = { downloading: 1, attention: 2, stalled: 3 };
+  const states = {};
+  for (const r of rows) { const k = r.open?.inLibrary; if (k && (rank[r.state] || 0) > (rank[states[k]] || 0)) states[k] = r.state; }
+  return { rows, states, attention: rows.filter((r) => r.badge).length };
+}
+
+// Where each title's download stands, by library key. Empty when nothing is downloading or the services cannot be reached.
+export const downloadStates = () => (arr().length ? queueData().then((d) => d.states).catch(() => ({})) : Promise.resolve({}));
+
 export default {
   type: 'arr', name: 'Radarr and Sonarr',
   widgets: [
     {
       id: 'queue', title: 'Download queue', kind: 'list', requires: ['radarr', 'sonarr'], refresh: 10, order: 21, control: { span: 2 }, media: 'chip',
+      actions: { retry: dropFromQueue({ blocklist: true }), remove: dropFromQueue({ blocklist: false }) },
       fetch: async () => {
-        const rows = [];
-        const seen = new Set();
-        const idx = await titleIndex();
-        const torrents = await torrentInfo(); // qBittorrent knows the time left, and when it last moved, when the *arr does not
-        await Promise.all(arr().map(async (svc) => {
-          const movie = svc.type === 'radarr';
-          const q = await api(svc, `/api/v3/queue?page=1&pageSize=20&${movie ? 'includeMovie=true' : 'includeSeries=true&includeEpisode=true'}`);
-          for (const r of Array.isArray(q?.records) ? q.records : []) {
-            if (!r || typeof r !== 'object') continue;
-            const ep = r.episode && Number.isInteger(r.episode.seasonNumber) ? ` ${sxe(r.episode.seasonNumber, r.episode.episodeNumber)}` : '';
-            const left = typeof r.sizeleft === 'number' ? r.sizeleft : 0;
-            const size = typeof r.size === 'number' ? r.size : 0;
-            const rid = `${svc.id}:${int(r.id)}`;
-            seen.add(rid);
-            const tor = torrents.get(String(r.downloadId || '').toLowerCase());
-            const stalled = Number.isInteger(tor?.active) && tor.active > 0 ? left > 0 && Date.now() - tor.active * 1000 >= STALLED_MS : stalledFor(rid, left);
-            const bad = stalled || r.trackedDownloadStatus === 'warning' || r.trackedDownloadStatus === 'error';
-            const eta = fmtEta(timeleftSec(r.timeleft)) || fmtEta(tor?.eta);
-            const t = movie ? r.movie : r.series;
-            const why = (Array.isArray(r.statusMessages) ? r.statusMessages : []).flatMap((m) => (Array.isArray(m?.messages) ? m.messages : [])).map((m) => str(m, 160)).filter(Boolean)[0] || str(r.errorMessage, 160);
-            rows.push({
-              id: `${svc.id}:${int(r.id)}`, title: str(movie ? r.movie?.title : `${r.series?.title || ''}${ep}`, 120) || str(r.title, 120),
-              subtitle: label(r.trackedDownloadState) + (bad && why ? `: ${why}` : ''),
-              progress: size > 0 ? pct(1 - left / size) : 0, right: [left > 0 ? `${fmtBytes(left)} left` : fmtBytes(size), eta && left > 0 ? `~${eta}` : ''].filter(Boolean).join(' · '),
-              ...titleRef(idx, { type: movie ? 'movie' : 'show', tmdbId: int(t?.tmdbId), tvdbId: int(t?.tvdbId), title: t?.title, year: int(t?.year), poster: posterIn(t?.images) }),
-              // the badge goes to where the problem is shown and can be fixed: the queue page of the service that holds the download
-              ...(tor?.stalled ? { chip: { text: 'Stalled', tone: 'bad', hint: 'qBittorrent reports no data moving' } } : {}),
-              ...(bad ? { badge: { text: 'Needs attention', tone: 'warn', href: httpUrl(`${svc.url.replace(/\/+$/, '')}/activity/queue`), hint: why || (stalled ? `No progress for over 24 hours: open ${svc.name}` : `Open ${svc.name}`) } } : {}),
-            });
-          }
-        }));
-        for (const k of moved.keys()) if (!seen.has(k)) moved.delete(k); // finished or removed
-        return { rows: rows.slice(0, 8), empty: 'Nothing is downloading.', chip: rows.length ? `${rows.length} downloading` : '' };
+        const { rows, attention } = await queueData();
+        const chip = [rows.length ? `${rows.length} downloading` : '', attention ? `${attention} need${attention === 1 ? 's' : ''} attention` : ''].filter(Boolean).join(' · ');
+        return { rows: rows.slice(0, 50), fold: 4, empty: 'Nothing is downloading.', chip };
+      },
+    },
+    {
+      id: 'attention', title: 'Needs attention', kind: 'stat', requires: ['radarr', 'sonarr'], refresh: 30, order: 14, control: { span: 1 }, media: 'hidden',
+      fetch: async () => {
+        const { attention } = await queueData();
+        return { value: String(attention), sub: attention ? 'in the download queue' : 'all clear', tone: attention ? 'warn' : '' };
       },
     },
     {

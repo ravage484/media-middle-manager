@@ -16,6 +16,13 @@ export const isReleased = (r) => { const d = String(r?.releaseDate ?? r?.firstAi
 // Overseerr's media status: 2 pending, 3 processing, 4 partially available, 5 available.
 export const mediaStatus = (info) => (info && Number.isInteger(info.status) && info.status >= 1 && info.status <= 6 ? info.status : null);
 
+// TMDB only flags hardcore titles as adult; nudity compilations ("Nude Celebrities", sex-scene reels from sites like Mr. Skin) usually
+// carry no flag and an R-style rating. So a title is also treated as adult when its name or its description says what it is. Words that
+// legit films use ("naked" in The Naked Gun) are left out on purpose: a missed one is better than hiding a real movie.
+const ADULT_TITLE = /\b(nude|nudes|nudity|topless|porn\w*|xxx|hentai|busty|playmates?|playboy|centerfolds?|sex scenes?|sex tape|camgirls?|boobs)\b/i;
+const ADULT_TEXT = /\b(nude scenes?|nudity|topless|hentai|mr\.? skin|softcore|sex scenes? (compilation|collection|from)|compilation of (nude|sex)|erotic (film|movie|short|video|compilation))\b/i;
+const looksAdult = (r) => ADULT_TITLE.test(String(r?.title ?? r?.name ?? '')) || ADULT_TEXT.test(String(r?.overview ?? ''));
+
 // One entry of a results list, or null when it is not a movie or show (people, or something malformed).
 export function shapeResult(r) {
   const type = r?.mediaType === 'movie' ? 'movie' : r?.mediaType === 'tv' ? 'show' : null;
@@ -28,7 +35,7 @@ export function shapeResult(r) {
     rating: num(r.voteAverage) > 0 ? Math.round(r.voteAverage * 10) / 10 : null,
     overview: text(r.overview, 400),
     status: mediaStatus(r.mediaInfo), released: isReleased(r),
-    adult: r.adult === true, // TMDB's adult flag: the app hides these unless the user turns them on
+    adult: r.adult === true || looksAdult(r), // the app hides these unless the user turns them on
   };
 }
 
