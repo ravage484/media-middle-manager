@@ -1,4 +1,7 @@
+import crypto from 'node:crypto';
 import { api, getServices, qb } from '../lib.js';
+import { addHistory } from '../db.js';
+import { log } from '../log.js';
 import { fmtBytes, fmtEta, timeleftSec, str, int, pct, isoDate, httpUrl } from './util.js';
 import { titleIndex, titleRef, posterIn } from './titles.js';
 
@@ -45,10 +48,18 @@ const dropFromQueue = ({ blocklist }) => async (arg) => {
   const svc = m && arr().find((x) => x.id === m[1]);
   if (!svc) throw Object.assign(new Error('Unknown download'), { userError: true });
   const ids = m[2].split(',').map(Number);
+  const row = (await queueData().catch(() => ({ rows: [] }))).rows.find((r) => r.id === String(arg)); // what it is, for the record
   const flags = `removeFromClient=true&blocklist=${blocklist}&skipRedownload=${!blocklist}`;
   if (ids.length === 1) await api(svc, `/api/v3/queue/${ids[0]}?${flags}`, { method: 'DELETE' });
   else await api(svc, `/api/v3/queue/bulk?${flags}`, { method: 'DELETE', body: { ids } });
   queueCache = { at: 0, promise: null }; // the list just changed
+  // Recorded in the History tab with the deletions: this too throws something away, and says why you might want to know later.
+  const did = blocklist ? 'Removed from the download queue and blocklisted, so another release is searched for' : 'Removed from the download queue and the download client';
+  addHistory({
+    id: crypto.randomUUID(), at: new Date().toISOString(), key: row?.open?.inLibrary ?? null, title: row?.title || 'Unknown download', year: null, type: 'download',
+    options: { blocklist }, freedBytes: 0, removedFiles: [], steps: [{ label: `${did}${row?.subtitle ? ` (it was: ${row.subtitle})` : ''}`, ok: true, detail: '' }], ok: true,
+  });
+  log.info('queue', blocklist ? 'blocklisted and removed a download' : 'removed a download', { service: svc.name, title: row?.title, records: ids.length });
 };
 
 async function buildQueue() {

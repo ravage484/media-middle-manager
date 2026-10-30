@@ -3,7 +3,7 @@ import { api, fmtBytes } from './api.js';
 import Icon, { Mark } from './Icon.jsx';
 import { DAY } from './stale.js';
 
-const TYPES = [['movie', 'Movies'], ['show', 'Series'], ['episodes', 'Episodes']];
+const TYPES = [['movie', 'Movies'], ['show', 'Series'], ['episodes', 'Episodes'], ['download', 'Downloads']];
 const PERIODS = [[0, 'Any time'], [7, 'Last 7 days'], [30, 'Last 30 days'], [90, 'Last 90 days'], [365, 'Last year']];
 // [name, ascending comparator, [label when high to low, label when low to high]]
 const SORTS = {
@@ -14,7 +14,7 @@ const SORTS = {
   type: ['Type', (a, b) => label(a.type).localeCompare(label(b.type)), ['Z to A', 'A to Z']],
   result: ['Result', (a, b) => Number(a.ok) - Number(b.ok), ['Clean first', 'Problems first']],
 };
-const label = (t) => (t === 'movie' ? 'Movie' : t === 'episodes' ? 'Episodes' : 'Series');
+const label = (t) => (t === 'movie' ? 'Movie' : t === 'episodes' ? 'Episodes' : t === 'download' ? 'Download' : 'Series');
 
 export default function History() {
   const [rows, setRows] = useState(null);
@@ -51,7 +51,7 @@ export default function History() {
 
   if (err) return <div className="notice bad">{err}</div>;
   if (!rows) return <p>Loading…</p>;
-  if (!rows.length) return <p className="dim">Nothing deleted yet.</p>;
+  if (!rows.length) return <p className="dim">Nothing deleted or removed yet.</p>;
   return (
     <>
       <div className="toolbar historybar">
@@ -83,15 +83,15 @@ export default function History() {
         <button className="withicon" title="Toggle sort direction" onClick={() => setDesc(!desc)}><Icon name={desc ? 'arrowDown' : 'arrowUp'} />{SORTS[sort][2][desc ? 0 : 1]}</button>
         {filtered && <button className="link" onClick={clear}>Clear all</button>}
       </div>
-      <div className="count">{shown.length} of {rows.length} deletions · {fmtBytes(freed)} freed</div>
-      {shown.length === 0 && <p className="dim">No deletions match these filters.</p>}
+      <div className="count">{shown.length} of {rows.length} entries · {fmtBytes(freed)} freed</div>
+      {shown.length === 0 && <p className="dim">No entries match these filters.</p>}
       <div className="history">
         {shown.map((h) => (
           <details key={h.id}>
             <summary>
               <Mark ok={h.ok} warn />
               <b>{h.title}</b> <small>{h.year} · {label(h.type)}</small>
-              <span className="dim">{new Date(h.at).toLocaleString()} · freed {fmtBytes(h.freedBytes)}</span>
+              <span className="dim">{new Date(h.at).toLocaleString()}{h.type === 'download' ? '' : ` · freed ${fmtBytes(h.freedBytes)}`}</span>
             </summary>
             <ul>
               {h.steps.map((s, i) => <li key={i} className={s.ok ? '' : 'warn'}><Mark ok={s.ok} /> {s.label}{s.ok ? '' : ` — ${s.detail}`}</li>)}

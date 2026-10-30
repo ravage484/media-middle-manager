@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { log } from './log.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { initKey, keySource, encryptSecret, decryptSecret, decryptSecretWith, deriveKey, isEncrypted, canDecrypt, aadFor } from './secrets.js';
@@ -141,7 +142,7 @@ function protectSecrets() {
     // The old plain text is still in the file's free space and write-ahead log: compact both so it is really gone.
     db.exec('VACUUM');
     db.pragma('wal_checkpoint(TRUNCATE)');
-    console.log(`Encrypted the stored credentials of ${n} service(s)`);
+    log.info('db', `encrypted the stored credentials of ${n} service(s)`);
   }
 }
 protectSecrets();
@@ -301,13 +302,13 @@ function importLegacy() {
   if (Array.isArray(services) && !db.prepare('SELECT 1 FROM services LIMIT 1').get()) {
     saveServices(services);
     retire('config.json');
-    console.log(`Imported ${services.length} service(s) from config.json. The original was kept as config.json.migrated and still holds your API keys in PLAIN TEXT: delete it once you have checked everything works.`);
+    log.info('db', `imported ${services.length} service(s) from config.json. The original was kept as config.json.migrated and still holds your API keys in PLAIN TEXT: delete it once you have checked everything works.`);
   }
   const history = readJson('history.json');
   if (Array.isArray(history) && !db.prepare('SELECT 1 FROM history LIMIT 1').get()) {
     replaceHistory(history.filter((h) => h && typeof h.id === 'string' && typeof h.at === 'string'));
     retire('history.json');
-    console.log(`Imported ${history.length} history entries from history.json (kept as history.json.migrated)`);
+    log.info('db', `imported ${history.length} history entries from history.json (kept as history.json.migrated)`);
   }
 }
 importLegacy();
