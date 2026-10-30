@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from './api.js';
+import { normalizeAppearance } from './themes.js';
 
 // Per-browser preferences that travel with an export.
 const PREF_KEYS = ['appearance', 'deleteDefaults', 'view', 'sort', 'desc', 'pageSize', 'navCollapsed', 'homeView', 'staleDays', 'staleLayout', 'staleNever', 'stalePlayed'];
@@ -61,7 +62,11 @@ export default function ImportExport() {
       if (r.removed) parts.push(`${r.removed} removed`);
       if (impHistory && file.data.history) parts.push(`${r.historyAdded} history entries added`);
       const reload = impPrefs && file.data.preferences;
-      if (reload) writePrefs(file.data.preferences);
+      if (reload) {
+        writePrefs(file.data.preferences);
+        // appearance is kept on the server now: an imported one has to go there, or the server's copy would win on reload
+        try { const a = normalizeAppearance(JSON.parse(file.data.preferences.appearance)); if (a) await api.savePrefs({ appearance: a }); } catch { /* not an appearance we can use */ }
+      }
       setMsg({ ok: true, text: `Imported: ${parts.join(', ')}.${reload ? ' Reloading to apply your preferences…' : ''}` });
       setFile(null);
       if (reload) setTimeout(() => window.location.reload(), 1200);

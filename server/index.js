@@ -13,6 +13,9 @@ import { browse, search as discoverSearch, genres as discoverGenres, titleDetail
 import { plexPayload, syncPlexData, refreshEntry, acceptPlexHook, plexTick } from './plexcache.js';
 import { keywordsPayload, startSync, stopSync, setAuto, getAuto, syncStatus, tick, acceptHook, hookToken } from './keywords.js';
 import { snapshot, restoreFrom, DATA, securityInfo } from './db.js';
+import { getPrefs, setPrefs } from './prefs.js';
+import { log, note, requestLog } from './log.js';
+import { downloadStates } from './widgets/arr.js';
 import { authRoutes, requireAuth, sameOrigin, bootstrapAdmin, AUTH_DISABLED } from './auth.js';
 
 const { version: VERSION } = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
@@ -43,6 +46,7 @@ app.use((req, res, next) => {
 const smallJson = express.json({ limit: '100kb' });
 const bigJson = express.json({ limit: '20mb' }); // an import can carry a long history
 app.use((req, res, next) => (req.method === 'POST' && req.path === '/api/import' ? next() : smallJson(req, res, next)));
+app.use(requestLog); // first, so refused and failed requests are seen too
 app.use('/api', sameOrigin);
 authRoutes(app); // /api/auth/* handles its own access rules
 // Radarr/Sonarr "Connect > Webhook" calls this when something is added or imported. It has its own secret token instead of a session.
@@ -58,7 +62,11 @@ app.post('/api/hooks/plex', express.raw({ type: () => true, limit: '2mb' }), (re
 app.use('/api', requireAuth); // everything below needs a signed-in user
 
 // Errors marked userError (bad selection, show not found) are the caller's mistake: 400, not 500.
-const wrap = (fn) => (req, res) => Promise.resolve(fn(req, res)).catch((e) => res.status(e.userError ? 400 : 500).json({ error: e.message }));
+const wrap = (fn) => (req, res) => Promise.resolve(fn(req, res)).catch((e) => {
+  res.locals.error = e.message; // the request line says why it failed
+  if (!e.userError) log.error('http', `${req.method} ${req.originalUrl.split('?')[0]} failed`, { err: e }); // a mistake by the caller is not ours to shout about
+  res.status(e.userError ? 400 : 500).json({ error: e.message });
+});
 const bad = (res, msg) => res.status(400).json({ error: msg });
 const mask = (s) => ({ ...s, apiKey: s.apiKey ? MASK : '', password: s.password ? MASK : '' });
 // Replace masked secrets with the stored ones.
@@ -70,6 +78,14 @@ const unmask = (s, old) => {
     apiKey: s.apiKey === MASK ? prev.apiKey || '' : s.apiKey || '',
     password: s.password === MASK ? prev.password || '' : s.password || '',
   };
+};
+// Adult titles (see tmdb.js) are left out of lists unless this account turned them on (see prefs.js). Applied to what leaves the server,
+// so the cached lists stay whole and one account's choice never leaks into another's.
+const sfw = (req, d) => {
+  if (!d || typeof d !== 'object' || getPrefs(req).showAdult) return d;
+  const out = { ...d };
+  for (const k of ['results', 'items', 'credits']) if (Array.isArray(d[k])) out[k] = d[k].filter((r) => !r?.adult);
+  return out;
 };
 const asObject = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
 
@@ -96,6 +112,7 @@ app.put('/api/services', wrap((req, res) => {
   try { list = req.body.map((s, i) => cleanService(unmask(asObject(s), old), i)); } catch (e) { return bad(res, e.message); }
   if (new Set(list.map((s) => s.id)).size !== list.length) return bad(res, 'Duplicate service ids');
   saveServices(list);
+  note(res, `${list.length} services saved: ${list.map((s) => s.type).join(', ')}`);
   resetPlexIndex();
   resetWidgetCache();
   res.json(getServices().map(mask));
@@ -103,8 +120,8 @@ app.put('/api/services', wrap((req, res) => {
 app.post('/api/services/test', wrap(async (req, res) => {
   let svc;
   try { svc = cleanService(unmask({ name: 'test', ...asObject(req.body) }, getServices())); } catch (e) { return bad(res, e.message); }
-  try { res.json({ ok: true, detail: await testService(svc) }); }
-  catch (e) { res.json({ ok: false, detail: e.message }); }
+  try { res.json({ ok: true, detail: await testService(svc) }); note(res, `tested ${svc.type}: ok`); }
+  catch (e) { note(res, `tested ${svc.type}: failed`); log.warn('service', `connection test failed for ${svc.type}`, { err: e.message }); res.json({ ok: false, detail: e.message }); }
 }));
 
 app.get('/api/library', wrap(async (req, res) => {
@@ -119,6 +136,7 @@ app.post('/api/plan', wrap(async (req, res) => {
 app.post('/api/delete', wrap(async (req, res) => {
   let keys, options;
   try { keys = cleanKeys(asObject(req.body).keys); options = cleanOptions(asObject(req.body).options); } catch (e) { return bad(res, e.message); }
+  note(res, `delete ${keys.length} title(s) files=${options.files} torrents=${options.torrents} plex=${options.plex} overseerr=${options.overseerr}`);
   res.json(await execute(keys, options));
 }));
 app.get('/api/history', (req, res) => res.json(getHistory()));
@@ -138,7 +156,7 @@ function cleanSelection(sel) {
 }
 // Keywords from Overseerr (TMDB), cached so the library can filter by them. The sync runs in the background.
 app.get('/api/keywords', (req, res) => res.json(keywordsPayload()));
-app.post('/api/keywords/sync', wrap(async (req, res) => res.json(await startSync({ force: asObject(req.body).force === true }))));
+app.post('/api/keywords/sync', wrap(async (req, res) => { const force = asObject(req.body).force === true; note(res, `keyword sync force=${force}`); res.json(await startSync({ force })); }));
 app.post('/api/keywords/stop', (req, res) => res.json(stopSync()));
 app.post('/api/keywords/webhook/token', (req, res) => { hookToken(true); res.json(syncStatus()); }); // a new token; the old one stops working
 app.put('/api/keywords/auto', wrap(async (req, res) => {
@@ -157,6 +175,7 @@ app.post('/api/plex/sync', wrap(async (req, res) => res.json(await syncPlexData(
 app.post('/api/plex/act', wrap(async (req, res) => {
   const b = asObject(req.body);
   let key; try { key = cleanKeys([b.key])[0]; } catch { return bad(res, 'Expected a title'); }
+  note(res, `plex change on ${key}`);
   const result = await plexAct(key, b);
   await refreshEntry(key).catch(() => {}); // the cache follows the change at once
   res.json(result);
@@ -164,28 +183,31 @@ app.post('/api/plex/act', wrap(async (req, res) => {
 
 // Discover (through Overseerr): browse, search, one title, and asking for it. Only the last one changes anything.
 const pageOf = (q) => Number(q.page || 1);
-app.get('/api/discover', wrap(async (req, res) => res.json(await browse({ section: String(req.query.section || ''), type: req.query.type, genre: Number(req.query.genre), page: pageOf(req.query) }))));
-app.get('/api/discover/search', wrap(async (req, res) => res.json(await discoverSearch(req.query.q, pageOf(req.query)))));
+app.get('/api/discover', wrap(async (req, res) => res.json(sfw(req, await browse({ section: String(req.query.section || ''), type: req.query.type, genre: Number(req.query.genre), page: pageOf(req.query) })))));
+app.get('/api/downloads', wrap(async (req, res) => res.json({ states: await downloadStates() })));
+app.get('/api/prefs', wrap(async (req, res) => res.json(getPrefs(req))));
+app.put('/api/prefs', wrap(async (req, res) => { note(res, `changed ${Object.keys(asObject(req.body)).join(', ')}`); res.json(setPrefs(req, req.body)); }));
+app.get('/api/discover/search', wrap(async (req, res) => res.json(sfw(req, await discoverSearch(req.query.q, pageOf(req.query))))));
 app.get('/api/discover/genres', wrap(async (req, res) => res.json(await discoverGenres(req.query.type))));
 app.get('/api/discover/title', wrap(async (req, res) => res.json(await titleDetails(req.query.type, req.query.id))));
 app.get('/api/library/person', wrap(async (req, res) => res.json(await personLibrary(Number(req.query.id)))));
-app.get('/api/discover/person', wrap(async (req, res) => res.json(await personDetails(Number(req.query.id)))));
-app.post('/api/discover/request', wrap(async (req, res) => { const b = asObject(req.body); res.json(await requestTitle({ type: b.type, tmdbId: b.id, seasons: b.seasons, is4k: b.is4k })); }));
-app.post('/api/discover/unrequest', wrap(async (req, res) => { const b = asObject(req.body); res.json(await cancelRequest(b.requestId)); }));
+app.get('/api/discover/person', wrap(async (req, res) => res.json(sfw(req, await personDetails(Number(req.query.id))))));
+app.post('/api/discover/request', wrap(async (req, res) => { const b = asObject(req.body); note(res, `request ${b.type}:${b.id}${b.is4k ? ' 4k' : ''}`); res.json(await requestTitle({ type: b.type, tmdbId: b.id, seasons: b.seasons, is4k: b.is4k })); }));
+app.post('/api/discover/unrequest', wrap(async (req, res) => { const b = asObject(req.body); note(res, `cancel request ${b.requestId}`); res.json(await cancelRequest(b.requestId)); }));
 
 // Home widgets: what can be shown, the data for one, and the few things a widget may change (each named in its adapter).
 app.get('/api/widgets', (req, res) => res.json({ widgets: listWidgets() }));
-app.get('/api/widgets/data', wrap(async (req, res) => res.json(await widgetData(typeof req.query.id === 'string' ? req.query.id : ''))));
-app.post('/api/widgets/action', wrap(async (req, res) => { const b = asObject(req.body); res.json(await widgetAction(b.id, b.action, b.arg)); }));
+app.get('/api/widgets/data', wrap(async (req, res) => { const r = await widgetData(typeof req.query.id === 'string' ? req.query.id : ''); res.json(r.data ? { ...r, data: sfw(req, r.data) } : r); }));
+app.post('/api/widgets/action', wrap(async (req, res) => { const b = asObject(req.body); note(res, `${b.id}.${b.action} ${b.arg}`); res.json(await widgetAction(b.id, b.action, b.arg)); }));
 
 // Keep: titles the Stale list leaves alone.
 app.get('/api/keep', (req, res) => res.json({ keep: keepMap() }));
-app.post('/api/keep', wrap(async (req, res) => { const b = asObject(req.body); const keep = setKeep(b.keys, b.keep); resetWidgetCache(); res.json({ keep }); }));
+app.post('/api/keep', wrap(async (req, res) => { const b = asObject(req.body); const keep = setKeep(b.keys, b.keep); note(res, `${b.keep ? 'keep' : 'unkeep'} ${Array.isArray(b.keys) ? b.keys.length : 0} title(s)`); resetWidgetCache(); res.json({ keep }); }));
 
 // Recommendations / similar titles from Overseerr, for the bottom of a title's window.
 app.get('/api/recommendations', wrap(async (req, res) => {
   let key; try { key = cleanKeys([req.query.key])[0]; } catch { return bad(res, 'Expected a title'); }
-  res.json(await getRecommendations(key, String(req.query.kind || 'recommendations'), Number(req.query.page || 1)));
+  res.json(sfw(req, await getRecommendations(key, String(req.query.kind || 'recommendations'), Number(req.query.page || 1))));
 }));
 
 // Backdrop, ratings, dates and links for one title's window.
@@ -206,6 +228,7 @@ app.post('/api/episodes/delete', wrap(async (req, res) => {
   let key, selection;
   try { key = cleanShowKey(asObject(req.body).key); selection = cleanSelection(asObject(req.body).selection); } catch (e) { return bad(res, e.message); }
   const o = asObject(asObject(req.body).options);
+  note(res, `delete episodes of ${key}`);
   res.json(await executeEpisodes(key, selection, { torrents: o.torrents === true, plex: o.plex === true })); // files are the point; nothing else is on by default
 }));
 
@@ -218,6 +241,7 @@ app.post('/api/import', bigJson, wrap((req, res) => {
   try {
     const body = asObject(req.body);
     const stats = importData(body.data, asObject(body.options));
+    note(res, `import: ${stats.added} added, ${stats.updated} updated, ${stats.removed} removed`);
     const auto = asObject(asObject(body.data).settings).autoUpdate;
     if (auto !== undefined) {
       try { setAuto(auto); stats.settingsApplied = true; } catch { stats.settingsApplied = false; } // a bad value in the file never undoes the import
@@ -250,6 +274,7 @@ app.post('/api/restore', express.raw({ type: () => true, limit: '100mb' }), wrap
   fs.writeFileSync(tmp, req.body);
   try {
     const result = restoreFrom(tmp, sourceKey);
+    log.warn('db', 'database restored from a backup file', { user: req.user?.username });
     resetLibraryCache();
     res.json(result);
   } catch (e) {
@@ -272,7 +297,7 @@ app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
   if (err.type === 'entity.too.large') return res.status(413).json({ error: 'The request is too large' });
   if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'The request is not valid JSON' });
   const status = Number.isInteger(err.status) && err.status >= 400 && err.status < 600 ? err.status : 500;
-  if (status >= 500) console.error(err);
+  if (status >= 500) log.error('http', `${req.method} ${req.path} failed`, { err });
   res.status(status).json({ error: status >= 500 ? 'Internal error' : 'Bad request' });
 });
 
@@ -281,6 +306,12 @@ const port = process.env.PORT || 3001;
 const host = process.env.MMM_HOST || undefined; // e.g. 127.0.0.1 when a reverse proxy on the same machine is the only client
 app.listen(port, host, () => {
   warmLibrary(); // so the first page load after a start finds the library ready
-  console.log(`Media Middle Manager API on http://${host || 'localhost'}:${port}`);
-  if (AUTH_DISABLED) console.warn('WARNING: authentication is disabled (MMM_AUTH_DISABLED=true). Anyone who can reach this port can delete media.');
+  log.info('server', `Media Middle Manager ${VERSION} listening on http://${host || 'localhost'}:${port}`, { node: process.version, data: DATA, services: getServices().length });
+  const l = log.settings();
+  log.info('server', 'logging', { level: l.level, format: l.format, file: l.file || 'off' });
+  if (AUTH_DISABLED) log.warn('server', 'authentication is disabled (MMM_AUTH_DISABLED=true). Anyone who can reach this port can delete media.');
 });
+
+// Nothing that goes wrong should vanish: it is logged, and a crash is logged before the process ends.
+process.on('unhandledRejection', (err) => log.error('process', 'unhandled promise rejection', { err: err instanceof Error ? err : new Error(String(err)) }));
+process.on('uncaughtException', (err) => { log.error('process', 'uncaught exception, exiting', { err }); process.exit(1); });

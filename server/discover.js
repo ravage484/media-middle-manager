@@ -1,6 +1,6 @@
-import { getLibrary, api } from './lib.js';
+import { getLibrary, getServices, api } from './lib.js';
 import { overseerrService } from './keywords.js';
-import { shapeResults, shapeCast, shapePeople, libraryIndex, inLibraryOf, withLibrary, text, num, image, id, mediaStatus } from './tmdb.js';
+import { shapeResults, shapeCast, shapePeople, isReleased, libraryIndex, inLibraryOf, withLibrary, text, num, image, id, mediaStatus } from './tmdb.js';
 
 /*
  * Discover: browse and search what exists (not just what you own) through Overseerr, and ask for it. Lists and details come from
@@ -33,6 +33,20 @@ const cached = async (path, ttl, fetcher) => {
   return body;
 };
 
+// type:tmdbId of everything in the Radarr and Sonarr download queues, so a requested title can say it is really downloading.
+const downloadingNow = () => cached('queue', 15000, async () => {
+  const keys = new Set();
+  await Promise.all(getServices().filter((x) => x.type === 'radarr' || x.type === 'sonarr').map(async (x) => {
+    const movie = x.type === 'radarr';
+    try {
+      const q = await api(x, `/api/v3/queue?page=1&pageSize=100&${movie ? 'includeMovie=true' : 'includeSeries=true'}`);
+      for (const r of Array.isArray(q?.records) ? q.records : []) { const t = id(movie ? r?.movie?.tmdbId : r?.series?.tmdbId); if (t) keys.add(`${movie ? 'movie' : 'show'}:${t}`); }
+    } catch { /* optional: the label just stays general */ }
+  }));
+  return keys;
+});
+const withDownloading = async (results) => { const q = await downloadingNow(); return results.map((r) => ({ ...r, downloading: q.has(`${r.type}:${r.tmdbId}`) })); };
+
 /* ---------- browsing and searching ---------- */
 const SECTIONS = {
   trending: '/api/v1/discover/trending',
@@ -48,7 +62,7 @@ async function listFrom(path, page, ttl) {
     return { totalPages: Number.isInteger(r?.totalPages) ? r.totalPages : 1, results: shapeResults(r?.results), people: shapePeople(r?.results) };
   });
   const { items } = await getLibrary(false);
-  return { page, hasMore: page < Math.min(d.totalPages, 20), results: withLibrary(d.results, libraryIndex(items)), ...(page === 1 && d.people.length ? { people: d.people } : {}) };
+  return { page, hasMore: page < Math.min(d.totalPages, 20), results: await withDownloading(withLibrary(d.results, libraryIndex(items))), ...(page === 1 && d.people.length ? { people: d.people } : {}) };
 }
 
 // section: one of SECTIONS, or "genre" with a type and a genre id.
@@ -127,7 +141,7 @@ export async function titleDetails(type, tmdbId) {
     rating: num(d?.voteAverage) > 0 ? Math.round(d.voteAverage * 10) / 10 : null,
     votes: Number.isInteger(d?.voteCount) && d.voteCount >= 0 ? d.voteCount : null,
     status: mediaStatus(info), status4k: mediaStatus({ status: info?.status4k }), can4k: await has4k(k), requests,
-    ...inLibraryOf(libraryIndex(items), type, tid),
+    ...inLibraryOf(libraryIndex(items), type, tid), released: isReleased(d), downloading: (await downloadingNow()).has(`${type}:${tid}`),
     cast: shapeCast(d?.credits?.cast),
     seasons: k === 'tv'
       ? (Array.isArray(d?.seasons) ? d.seasons : []).filter((x) => Number.isInteger(x?.seasonNumber) && x.seasonNumber > 0).slice(0, 200).map((x) => ({
@@ -158,7 +172,7 @@ export async function personDetails(personId) {
     id: pid, name: text(p?.name, 80) || '(unknown)', photo: image(p?.profilePath, 'w342'),
     bio: text(p?.biography, 1800), born, died: /^\d{4}-\d{2}-\d{2}$/.test(String(p?.deathday)) ? p.deathday : null, birthplace: text(p?.placeOfBirth, 120),
     link: `https://www.themoviedb.org/person/${pid}`,
-    credits: withLibrary(credits, libraryIndex(items)),
+    credits: await withDownloading(withLibrary(credits, libraryIndex(items))),
   };
 }
 

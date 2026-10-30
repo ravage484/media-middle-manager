@@ -175,6 +175,9 @@ Everything is configured in the UI under **Settings**. The server is configured 
 | `MMM_HOST` | all interfaces | Address to listen on, for example `127.0.0.1` when a reverse proxy on the same machine is the only client |
 | `MMM_REGION` | `US` | Two-letter country whose streaming providers are shown in a title's window |
 | `MMM_TRUST_PROXY` | `false` | `true` when behind a reverse proxy, so the real client IP is used for login throttling and HTTPS is detected |
+| `LOG_LEVEL` | `info` | `error`, `warn`, `info` or `debug`. `info` logs changes and failures; `debug` also logs every read (the dashboard polls every few seconds) |
+| `MMM_LOG_FORMAT` | `text` | `json` writes one JSON object per line, for log shippers |
+| `MMM_LOG_FILE` | `true` | `false` logs to the console only. Otherwise lines also go to `DATA_DIR/logs/mmm.log` (5 files of up to 5 MB) |
 
 Where each service's credentials come from:
 
@@ -200,6 +203,19 @@ Everything the server stores is in one SQLite file, `mmm.db`, inside `DATA_DIR` 
 Schema changes are applied automatically at startup, tracked with SQLite's `user_version`.
 
 **Upgrading from the JSON files:** the first start with this version imports an existing `config.json` and `history.json` into the database and renames them to `config.json.migrated` and `history.json.migrated`. They are left in place as a backup. **`config.json.migrated` still holds your API keys in plain text**, so delete it as soon as you have checked that everything works.
+
+### Logs
+
+One line per event, to the console (Docker and systemd pick it up) and to `DATA_DIR/logs/mmm.log`, which rotates at 5 MB and keeps five older files:
+
+```
+2026-10-30T17:52:29Z INFO  [http] POST /api/widgets/action status=200 ms=412 user=admin note="queue.retry 3b0e…:1395080920"
+2026-10-30T17:52:31Z WARN  [widget] health failed (logged once until it recovers) err="connect ECONNREFUSED"
+```
+
+What is logged: every change you make (with who made it and what it was), failed requests with the reason, sign-ins and failed sign-ins (with the address, for fail2ban), a service or widget that stops answering (once, then again when it recovers), startup, and crashes. Removing or blocklisting a download from the queue is also recorded in the **History** tab.
+
+What is never logged: passwords, API keys, request bodies, and query strings, so what you search for stays private.
 
 ### Encryption of API keys
 

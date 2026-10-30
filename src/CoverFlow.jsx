@@ -10,7 +10,7 @@ import { statusOf } from './status.js';
 const SHOWN = 5; // posters visible each side of the middle one
 const LOOP_MIN = 4; // fewer than this and going round would look odd, so it simply stops at the ends
 const AUTO_MS = 7000; // time each poster stays in front on its own
-const SWIPE = 40; // pixels of dragging that count as one step
+const SWIPE = 100; // pixels of dragging that count as one step
 
 const meta = (r) => [r.type === 'movie' ? 'Movie' : 'Series', r.genres?.join(', '), r.rating ? `★ ${r.rating.toFixed(1)}` : ''].filter(Boolean).join(' · ');
 
@@ -81,9 +81,9 @@ export default function CoverFlow({ items, onOpen, label }) {
   };
   // only sideways wheel (a trackpad swipe) moves it; the up-and-down wheel still scrolls the page
   const onWheel = (e) => {
-    if (Math.abs(e.deltaX) <= Math.abs(e.deltaY) || Math.abs(e.deltaX) < 8) return;
+    if (Math.abs(e.deltaX) <= Math.abs(e.deltaY) || Math.abs(e.deltaX) < 20) return;
     const now = Date.now();
-    if (now - wheel.current < 120) return;
+    if (now - wheel.current < 300) return;
     wheel.current = now;
     go(e.deltaX > 0 ? 1 : -1);
   };

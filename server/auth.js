@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { log } from './log.js';
 import { db } from './db.js';
 
 /*
@@ -88,7 +89,7 @@ function recordFail(keys) {
 setInterval(() => { for (const [k, f] of fails) if (f.until < Date.now() - 3600000) fails.delete(k); }, 600000).unref();
 // Failed logins go to the log (journalctl) so tools like fail2ban can use them. Attacker-supplied text is sanitised.
 const clean = (s) => JSON.stringify(String(s).replace(/[^\x20-\x7e]/g, '?').slice(0, 40));
-const logFail = (req, username, what) => console.warn(`[auth] ${what} for user ${clean(username)} from ${clean(req.ip)}`);
+const logFail = (req, username, what) => log.warn('auth', `${what} for user ${clean(username)} from ${clean(req.ip)}`);
 
 /* ---------- sessions ---------- */
 function createSession(userId) {
@@ -171,6 +172,7 @@ export function authRoutes(app) {
     if (!validPassword(password, username)) return res.status(400).json({ error: PASSWORD_RULE });
     const id = await createFirstUser(username, password);
     if (!id) return res.status(409).json({ error: 'An account already exists. Sign in instead.' });
+    log.info('auth', 'first account created', { user: username, ip: req.ip });
     ok(req, res, id, username);
   });
 
@@ -191,12 +193,13 @@ export function authRoutes(app) {
     fails.delete(keys[0]); fails.delete(keys[1]);
     // The password was right, so this is the moment to move an older, weaker hash up to the current parameters.
     if (check.needsRehash) db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(await hashPassword(String(password)), user.id);
+    log.info('auth', 'signed in', { user: user.username, ip: req.ip });
     ok(req, res, user.id, user.username);
   });
 
   app.post('/api/auth/logout', (req, res) => {
     const s = sessionFor(req);
-    if (s) db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(s.hash);
+    if (s) { db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(s.hash); log.info('auth', 'signed out', { user: s.username }); }
     setCookie(req, res, '', 0);
     res.json({ ok: true });
   });
@@ -211,6 +214,7 @@ export function authRoutes(app) {
     if (!validPassword(next, user.username)) return res.status(400).json({ error: PASSWORD_RULE });
     db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(await hashPassword(next), user.id);
     db.prepare('DELETE FROM sessions WHERE user_id = ? AND token_hash != ?').run(user.id, req.user.hash); // sign out everywhere else
+    log.info('auth', 'password changed, other sessions signed out', { user: user.username });
     res.json({ ok: true });
   });
 }
@@ -227,6 +231,6 @@ async function createFirstUser(username, password) {
 export async function bootstrapAdmin() {
   const { MMM_ADMIN_USER: u, MMM_ADMIN_PASSWORD: p } = process.env;
   if (AUTH_DISABLED || userCount() > 0 || !u || !p) return;
-  if (!validUsername(u) || !validPassword(p, u)) { console.error(`MMM_ADMIN_USER / MMM_ADMIN_PASSWORD ignored. ${USERNAME_RULE} ${PASSWORD_RULE}`); return; }
-  if (await createFirstUser(u, p)) console.log(`Created account "${u}" from environment variables`);
+  if (!validUsername(u) || !validPassword(p, u)) { log.error('auth', `MMM_ADMIN_USER / MMM_ADMIN_PASSWORD ignored. ${USERNAME_RULE} ${PASSWORD_RULE}`); return; }
+  if (await createFirstUser(u, p)) log.info('auth', 'account created from environment variables', { user: u });
 }

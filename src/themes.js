@@ -112,15 +112,17 @@ const KEY = 'appearance';
 export const WELCOME_MAX = 60;
 export const DEFAULT = { theme: 'indigo', logo: 'classic', font: 'system', welcome: '' }; // welcome: the Home heading; empty keeps "Home"
 
+// A saved appearance (from this browser or the server) made safe to use, or null when it names a theme or logo that does not exist.
+export function normalizeAppearance(a) {
+  if (!a || typeof a !== 'object') return null;
+  const theme = RENAMED[a.theme] || a.theme;
+  if (!THEMES.some((x) => x.id === theme) || !LOGO_STYLES.some(([id]) => id === a.logo)) return null;
+  return { theme, logo: a.logo, font: FONTS.some((f) => f.id === a.font) ? a.font : DEFAULT.font, welcome: typeof a.welcome === 'string' ? a.welcome.slice(0, WELCOME_MAX) : '' };
+}
+
+// The server holds the real choice; this browser keeps a copy so the sign-in page and the first paint look right.
 export function loadAppearance() {
-  try {
-    const a = JSON.parse(localStorage.getItem(KEY));
-    if (a && RENAMED[a.theme]) a.theme = RENAMED[a.theme];
-    if (THEMES.some((x) => x.id === a?.theme) && LOGO_STYLES.some(([id]) => id === a?.logo)) {
-      return { ...a, font: FONTS.some((f) => f.id === a.font) ? a.font : DEFAULT.font, welcome: typeof a.welcome === 'string' ? a.welcome.slice(0, WELCOME_MAX) : '' };
-    }
-  } catch { /* ignore */ }
-  return DEFAULT;
+  try { return normalizeAppearance(JSON.parse(localStorage.getItem(KEY))) || DEFAULT; } catch { return DEFAULT; }
 }
 
 export function applyAppearance(a) {

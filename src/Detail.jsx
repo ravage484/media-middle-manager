@@ -9,6 +9,7 @@ import Recommendations from './Recommendations.jsx';
 import CastRow from './CastRow.jsx';
 import TrailerDialog from './TrailerDialog.jsx';
 import { useKeep } from './keep.js';
+import { useDownloads, DOWNLOAD_LABEL } from './downloads.js';
 
 // Dates from the server are "2011-10-25" (no time zone); added dates are full timestamps.
 const day = (s) => (s ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? `${s}T12:00:00` : s).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : null);
@@ -60,6 +61,9 @@ export default function Detail({ item, hasWatch, hasPlex, hasOverseerr, onClose,
     const total = d.totalEpisodeCount || d.episodeCount;
     avail = !d.episodeFileCount ? ['Not on disk', 'dim'] : d.episodeFileCount >= total ? ['Available', 'ok'] : ['Partially available', 'warn'];
   }
+
+  const dl = DOWNLOAD_LABEL[useDownloads()[item.key]]; // a download in progress says more than "Not on disk"
+  if (dl && !item.hasFile) avail = dl;
 
   const sub = [
     isShow && d?.seasonCount ? `${d.seasonCount} Season${d.seasonCount === 1 ? '' : 's'}` : null,

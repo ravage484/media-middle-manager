@@ -1,4 +1,5 @@
 import { getServices } from '../lib.js';
+import { log } from '../log.js';
 import core from './core.js';
 import arr from './arr.js';
 import overseerr from './overseerr.js';
@@ -37,6 +38,8 @@ export function listWidgets() {
 }
 
 const cache = new Map(); // id -> { at, ttl, promise }: one request at a time per widget, shared by everyone who asks
+const failing = new Set(); // widgets whose last fetch failed, so one outage is one log line
+
 export async function widgetData(id) {
   const w = find(id);
   const hit = cache.get(id);
@@ -44,8 +47,16 @@ export async function widgetData(id) {
   const entry = { at: Date.now(), ttl: w.refresh * 1000, promise: null };
   // A failure is answered as data, not as an HTTP error, so one broken service shows as one broken widget. It is retried soon.
   entry.promise = Promise.resolve().then(() => w.fetch()).then(
-    (data) => ({ data, at: new Date().toISOString() }),
-    (e) => { entry.ttl = 10000; return { error: String(e.message || e).slice(0, 200), at: new Date().toISOString() }; },
+    (data) => {
+      if (failing.delete(id)) log.info('widget', `${id} is working again`);
+      return { data, at: new Date().toISOString() };
+    },
+    (e) => {
+      entry.ttl = 10000;
+      const error = String(e.message || e).slice(0, 200);
+      if (!failing.has(id)) { failing.add(id); log.warn('widget', `${id} failed (logged once until it recovers)`, { err: error }); } // it is retried every few seconds
+      return { error, at: new Date().toISOString() };
+    },
   );
   cache.set(id, entry);
   return entry.promise;

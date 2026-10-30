@@ -9,6 +9,7 @@ import SortTh, { sortClick } from './SortTh.jsx';
 import ItemMenu from './ItemMenu.jsx';
 import PlexListDialog from './PlexListDialog.jsx';
 import { useKeep } from './keep.js';
+import { useDownloads, DOWNLOAD_LABEL } from './downloads.js';
 import LoadingLogo from './LoadingLogo.jsx';
 import CastRow from './CastRow.jsx';
 
@@ -85,6 +86,7 @@ export default function Library({ goSettings, appearance, preset }) {
   const [kwSel, setKwSel] = useState(empty());
   const [panel, setPanel] = useState(false); // the filters panel
   const keep = useKeep();
+  const downloads = useDownloads();
   const [keepSel, setKeepSel] = useState(empty()); // Kept / Not kept
   const [colSel, setColSel] = useState(empty());
   const [plSel, setPlSel] = useState(empty());
@@ -321,7 +323,7 @@ export default function Library({ goSettings, appearance, preset }) {
                   <td className="nw">{fmtBytes(it.size)}</td>
                   <td className="hm">{it.rating ? it.rating.toFixed(1) : ''}</td>
                   {hasWatch && <td className="hm">{watchLabel(it.watch)}</td>}
-                  <td className="hm">{it.hasFile ? (it.monitored ? 'On disk' : 'On disk, unmonitored') : it.monitored ? 'Missing' : 'No file, unmonitored'}</td>
+                  <td className="hm">{DOWNLOAD_LABEL[downloads[it.key]] && !it.hasFile ? <span className={`badge ${DOWNLOAD_LABEL[downloads[it.key]][1]}`}>{DOWNLOAD_LABEL[downloads[it.key]][0]}</span> : it.hasFile ? (it.monitored ? 'On disk' : 'On disk, unmonitored') : it.monitored ? 'Missing' : 'No file, unmonitored'}</td>
                   <td className="rowbtns"><button className="icon" title="More actions" onClick={p.onMenu}><Icon name="more" size={16} strokeWidth={3} /></button><button className="icon" title="Delete" onClick={p.onDelete}><Trash /></button></td>
                 </tr>
               );
@@ -339,7 +341,9 @@ export default function Library({ goSettings, appearance, preset }) {
                   <span className="check" onClick={p.onCheck} title="Select">{p.selected ? <Icon name="check" size={14} /> : null}</span>
                   <span className="kind">{it.type === 'movie' ? 'Movie' : 'Series'}</span>
                   <span className="size">{fmtBytes(it.size)}</span>
-                  {!it.hasFile && <span className="nofile">No file</span>}
+                  {!it.hasFile && (DOWNLOAD_LABEL[downloads[it.key]]
+                    ? <span className={`nofile ${DOWNLOAD_LABEL[downloads[it.key]][1]}`}>{DOWNLOAD_LABEL[downloads[it.key]][0]}</span>
+                    : <span className="nofile">No file</span>)}
                   <button className="icon kebab" title="More actions" onClick={p.onMenu}><Icon name="more" size={16} strokeWidth={3} /></button>
                   <button className="icon trash" title="Delete" onClick={p.onDelete}><Trash /></button>
                 </div>
