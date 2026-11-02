@@ -16,7 +16,7 @@ The engine lives in its own repository (`community-scripts/core`) and can load t
 ## What it sets up
 
 - Debian 13 unprivileged LXC: 1 vCPU, 1 GB RAM, 4 GB disk (the 1 GB is for the one-time build).
-- Node.js 22, then `npm ci`, `npm run build` and `npm prune --omit=dev`.
+- Node.js 22 (kept on its newest patch by the update command), then `npm ci`, `npm run build` and `npm prune --omit=dev`.
 - A systemd service, `media-middle-manager`, listening on port **3001**.
 - Your settings and history in `/opt/media-middle-manager_data`, kept outside the app folder so updates never touch them.
 
@@ -54,7 +54,14 @@ The engine prefers local files when they exist. The container still downloads th
 
 ## Updating
 
-Run the same command again, or `update` in the container console. It stops the service, downloads the new release, rebuilds and restarts. According to the engine's source, `update` is a small script written into the container at install time that already contains your `COMMUNITY_SCRIPTS_URL`, so it fetches `ct/mediamiddlemanager.sh` from your repo. If it ever does not, run the full command above instead.
+Run the same command again, or `update` in the container console. It does these, in order:
+
+1. **Updates the container's system packages** (`apt upgrade`) and **Node.js 22 to its newest patch**, every time, even when the app has no new release. A container installed on an older Node (20, which no longer gets security fixes) is moved up to 22, and the database module is rebuilt for it.
+2. **If there is a new release:** stops the service, downloads it, rebuilds and starts it.
+3. **If there is not:** restarts the service, so it runs on the updated Node.js and packages.
+
+Node 22, not 24, because the database module (`better-sqlite3` 11.x) has prebuilt binaries only up to Node 22. Moving to Node 24 needs a newer `better-sqlite3` first.
+ According to the engine's source, `update` is a small script written into the container at install time that already contains your `COMMUNITY_SCRIPTS_URL`, so it fetches `ct/mediamiddlemanager.sh` from your repo. If it ever does not, run the full command above instead.
 
 ## Notes
 
