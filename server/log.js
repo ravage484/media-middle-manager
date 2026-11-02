@@ -65,6 +65,51 @@ export const log = {
   settings: () => ({ level: Object.keys(LEVELS).find((k) => LEVELS[k] === level), format: json ? 'json' : 'text', file: fileOn ? LOG_FILE : null }),
 };
 
+// The newest lines of the log, newest first, for the Logs tab. Reads the tail of the current file (and the previous one when it is short),
+// so a large log costs no more than a small one. level is the least severe level wanted; area and q (a piece of text) narrow it further.
+const TAIL_BYTES = 2 * 1024 * 1024;
+const LINE = /^(\S+) (ERROR|WARN|INFO|DEBUG)\s+\[([^\]]{1,40})\] (.*)$/;
+function tail(file) {
+  let fd;
+  try {
+    fd = fs.openSync(file, 'r');
+    const { size: len } = fs.fstatSync(fd);
+    const from = Math.max(0, len - TAIL_BYTES);
+    const buf = Buffer.alloc(len - from);
+    fs.readSync(fd, buf, 0, buf.length, from);
+    const lines = buf.toString('utf8').split('\n');
+    if (from > 0) lines.shift(); // starts mid-line
+    return lines.filter(Boolean);
+  } catch { return []; } finally { if (fd !== undefined) fs.closeSync(fd); }
+}
+function parse(line) {
+  const m = LINE.exec(line);
+  if (m) return { at: m[1], level: m[2].toLowerCase(), area: m[3], msg: m[4] };
+  if (line.startsWith('{')) {
+    try { const j = JSON.parse(line); const { at, level: lv, area, msg, ...rest } = j; return { at, level: lv, area, msg: [msg, ...Object.entries(rest).map(([k, v]) => `${k}=${v}`)].join(' ') }; } catch { /* not ours */ }
+  }
+  return null;
+}
+export function readLog({ level = 'info', area = '', q = '', limit = 300 } = {}) {
+  if (!fileOn) return { enabled: false, entries: [], areas: [] };
+  const max = LEVELS[level] ?? LEVELS.info;
+  const want = String(q).toLowerCase().slice(0, 100);
+  const out = [];
+  const areas = new Set();
+  for (const file of [LOG_FILE, `${LOG_FILE}.1`]) {
+    const lines = tail(file);
+    for (let i = lines.length - 1; i >= 0 && out.length < limit; i--) {
+      const e = parse(lines[i]);
+      if (!e) continue;
+      areas.add(e.area);
+      if ((LEVELS[e.level] ?? 9) > max || (area && e.area !== area) || (want && !`${e.area} ${e.msg}`.toLowerCase().includes(want))) continue;
+      out.push(e);
+    }
+    if (out.length >= limit) break;
+  }
+  return { enabled: true, entries: out, areas: [...areas].sort() };
+}
+
 // A route says what it did in words ("queue.retry 3b0e…"); the request line carries it.
 export const note = (res, text) => { res.locals.note = String(text).slice(0, 200); };
 

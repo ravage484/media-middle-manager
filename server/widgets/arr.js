@@ -44,14 +44,20 @@ const queueData = () => {
 // Takes an item out of its Radarr or Sonarr queue (and out of the download client). With blocklist the release is never picked again, so
 // the *arr looks for another one; without it the title is simply no longer waiting on this download.
 const dropFromQueue = ({ blocklist }) => async (arg) => {
-  const m = /^(.+):(\d{1,9}(?:,\d{1,9}){0,99})$/.exec(String(arg)); // a download is one or more queue records (a season pack has one per episode)
+  const m = /^(.+):(\d{1,10}(?:,\d{1,10}){0,99})$/.exec(String(arg)); // a download is one or more queue records (a season pack has one per episode); ids run past a billion
   const svc = m && arr().find((x) => x.id === m[1]);
   if (!svc) throw Object.assign(new Error('Unknown download'), { userError: true });
   const ids = m[2].split(',').map(Number);
   const row = (await queueData().catch(() => ({ rows: [] }))).rows.find((r) => r.id === String(arg)); // what it is, for the record
   const flags = `removeFromClient=true&blocklist=${blocklist}&skipRedownload=${!blocklist}`;
-  if (ids.length === 1) await api(svc, `/api/v3/queue/${ids[0]}?${flags}`, { method: 'DELETE' });
-  else await api(svc, `/api/v3/queue/bulk?${flags}`, { method: 'DELETE', body: { ids } });
+  try {
+    if (ids.length === 1) await api(svc, `/api/v3/queue/${ids[0]}?${flags}`, { method: 'DELETE' });
+    else await api(svc, `/api/v3/queue/bulk?${flags}`, { method: 'DELETE', body: { ids } });
+  } catch (e) {
+    queueCache = { at: 0, promise: null };
+    if (/-> 404(?!\d)/.test(String(e.message))) throw Object.assign(new Error(`${svc.name} no longer has that download (it finished or was removed). The list will update.`), { userError: true });
+    throw e;
+  }
   queueCache = { at: 0, promise: null }; // the list just changed
   // Recorded in the History tab with the deletions: this too throws something away, and says why you might want to know later.
   const did = blocklist ? 'Removed from the download queue and blocklisted, so another release is searched for' : 'Removed from the download queue and the download client';
@@ -103,7 +109,7 @@ async function buildQueue() {
         progress: size > 0 ? pct(1 - left / size) : 0, right: [left > 0 ? `${fmtBytes(left)} left` : fmtBytes(size), eta && left > 0 ? `~${eta}` : ''].filter(Boolean).join(' · '),
         ...(recs.length > 1 ? { children: recs.slice(0, 100).map((x) => ({ id: `${svc.id}:${x.id}`, title: sxe(x.episode?.seasonNumber, x.episode?.episodeNumber), subtitle: str(x.episode?.title, 100) || label(x.trackedDownloadState) })) } : {}),
         ...titleRef(idx, { type: movie ? 'movie' : 'show', tmdbId: int(t?.tmdbId), tvdbId: int(t?.tvdbId), title: t?.title, year: int(t?.year), poster: posterIn(t?.images) }),
-        ...(tor?.stalled ? { chip: { text: 'Stalled', tone: 'bad', hint: 'qBittorrent reports no data moving' } } : {}),
+        ...(stalled || tor?.stalled ? { chip: { text: 'Stalled', tone: 'bad', hint: tor?.stalled ? 'qBittorrent reports no data moving' : 'No progress for over 24 hours' } } : {}),
         ...(bad ? {
           badge: { text: 'Needs attention', tone: 'warn', hint: why || (stalled ? 'No progress for over 24 hours' : 'Click for options') },
           // what the chip or badge opens: what is wrong, the choices, and where the service shows it
@@ -133,7 +139,7 @@ export default {
       fetch: async () => {
         const { rows, attention } = await queueData();
         const chip = [rows.length ? `${rows.length} downloading` : '', attention ? `${attention} need${attention === 1 ? 's' : ''} attention` : ''].filter(Boolean).join(' · ');
-        return { rows: rows.slice(0, 50), fold: 4, empty: 'Nothing is downloading.', chip };
+        return { rows: rows.slice(0, 50), fold: 4, empty: 'Nothing is downloading.', chip, tone: attention ? 'warn' : 'ok' }; // the chip on Home goes amber when something needs a person
       },
     },
     {

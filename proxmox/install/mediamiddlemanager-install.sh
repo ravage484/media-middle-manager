@@ -19,6 +19,8 @@ $STD apt install -y \
   python3
 msg_ok "Installed Dependencies"
 
+# Node 22 on purpose: the database module (better-sqlite3 11.x) ships prebuilt binaries up to Node 22 only. The update command keeps this
+# version on its newest patch, and moves an older container up to it.
 NODE_VERSION="22" setup_nodejs
 
 fetch_and_deploy_gh_release "media-middle-manager" "ravage484/media-middle-manager" "tarball"

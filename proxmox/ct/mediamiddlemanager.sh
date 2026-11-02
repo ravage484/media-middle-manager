@@ -37,6 +37,23 @@ function update_script() {
     exit
   fi
 
+  # Security fixes come first and every time, even when the app itself has no new release: the operating system's packages, and the newest
+  # patch of Node.js 22. A container installed on an older Node (20, which no longer gets fixes) is moved up to 22 here too.
+  # Node 22 and not 24 on purpose: the database module (better-sqlite3 11.x) ships prebuilt binaries up to Node 22 only.
+  export DEBIAN_FRONTEND=noninteractive
+  local node_before node_after node_major_changed=0 app_updated=0
+  node_before=$(node -v 2>/dev/null || true)
+
+  msg_info "Updating system packages"
+  $STD apt-get update
+  $STD apt-get -y upgrade
+  msg_ok "Updated system packages"
+
+  NODE_VERSION="22" setup_nodejs
+  node_after=$(node -v 2>/dev/null || true)
+  # The database module is a compiled add-on, built for one Node version, so a new major version needs it rebuilt.
+  if [[ "${node_before%%.*}" != "${node_after%%.*}" ]]; then node_major_changed=1; fi
+
   if check_for_gh_release "media-middle-manager" "ravage484/media-middle-manager"; then
     msg_info "Stopping Service"
     systemctl stop media-middle-manager
@@ -56,6 +73,19 @@ function update_script() {
     systemctl start media-middle-manager
     msg_ok "Started Service"
     msg_ok "Updated successfully!"
+    app_updated=1
+  fi
+
+  if ((!app_updated)); then
+    # No new release, but Node.js or the system changed underneath the running service: restart it so it runs on the fixed versions.
+    msg_info "Restarting Service"
+    systemctl stop media-middle-manager
+    if ((node_major_changed)); then
+      cd /opt/media-middle-manager || exit
+      $STD npm rebuild better-sqlite3
+    fi
+    systemctl start media-middle-manager
+    msg_ok "Restarted Service"
   fi
   exit
 }
