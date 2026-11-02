@@ -14,7 +14,7 @@ import { plexPayload, syncPlexData, refreshEntry, acceptPlexHook, plexTick } fro
 import { keywordsPayload, startSync, stopSync, setAuto, getAuto, syncStatus, tick, acceptHook, hookToken } from './keywords.js';
 import { snapshot, restoreFrom, DATA, securityInfo } from './db.js';
 import { getPrefs, setPrefs } from './prefs.js';
-import { log, note, requestLog } from './log.js';
+import { log, note, requestLog, readLog, LOG_FILE } from './log.js';
 import { downloadStates } from './widgets/arr.js';
 import { authRoutes, requireAuth, sameOrigin, bootstrapAdmin, AUTH_DISABLED } from './auth.js';
 
@@ -252,6 +252,15 @@ app.post('/api/import', bigJson, wrap((req, res) => {
 }));
 
 app.get('/api/security', (req, res) => res.json(securityInfo()));
+// The log, for the Logs tab: the newest lines (filtered), and the whole file to download. Reading it is a debug-level event, not a logged one.
+app.get('/api/logs', wrap((req, res) => {
+  const limit = Math.min(1000, Math.max(1, Number(req.query.limit) || 300));
+  res.json(readLog({ level: String(req.query.level || 'info'), area: String(req.query.area || '').slice(0, 40), q: String(req.query.q || ''), limit }));
+}));
+app.get('/api/logs/download', (req, res) => {
+  if (!log.settings().file || !fs.existsSync(LOG_FILE)) return res.status(404).json({ error: 'There is no log file' });
+  res.download(LOG_FILE, `mmm-${new Date().toISOString().slice(0, 10)}.log`, { dotfiles: 'allow' });
+});
 app.get('/api/about', (req, res) => res.json({ version: VERSION, node: process.version }));
 
 // Whole-database backup. API keys inside it are encrypted, but the password hash is not, so keep it private.

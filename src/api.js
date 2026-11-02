@@ -13,6 +13,7 @@ export const api = {
   login: (username, password) => send('POST', '/api/auth/login', { username, password }),
   logout: () => send('POST', '/api/auth/logout', {}),
   changePassword: (current, next) => send('POST', '/api/auth/password', { current, next }),
+  logs: (params) => fetch(`/api/logs?${new URLSearchParams(params)}`).then(j),
   downloads: () => fetch('/api/downloads').then(j),
   prefs: () => fetch('/api/prefs').then(j),
   savePrefs: (patch) => send('PUT', '/api/prefs', patch),

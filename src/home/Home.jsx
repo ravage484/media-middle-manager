@@ -25,7 +25,7 @@ function Chip({ w, active, open, onClick }) {
   const { data } = useWidget(w, active);
   const text = data?.chip;
   if (!text) return null;
-  return <button className={`hchip ${data?.tone === 'warn' ? 'warn' : ''}`} aria-pressed={open} onClick={onClick}><span className={`dot ${data?.tone === 'warn' ? 'wn' : 'ok'}`} />{text}</button>;
+  return <button className="hchip" aria-pressed={open} onClick={onClick}><span className={`dot ${data?.tone === 'warn' ? 'wn' : 'ok'}`} />{text}</button>;
 }
 
 // The banner of the Media view: what was just added to your library, as a Cover Flow, newest in front.

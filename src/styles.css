@@ -633,6 +633,41 @@ td.rowbtns { white-space: nowrap; }
 .wchev { flex: none; background: none; border: 0; padding: 4px; color: var(--dim); }
 .wpeek { margin-top: -6px; }
 .wpeek .wrows li { border-top: 0; }
+.logbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
+.logbar .dsearch { flex: 1 1 220px; min-width: 180px; }
+.logbar .check { margin: 0; }
+.logbar .spacer { flex: 1; }
+/* Logs: an editor pane. The surfaces (background, tab strip, gutter, highlights, status bar) follow the theme. The word colours are a fixed
+   editor palette: the usual dark one, and a darker matching one on light themes so it stays readable. */
+.editor { --ok: #4ade80; --warn-c: #fbbf24; --err-c: #f87171; border: 1px solid var(--panel2); border-radius: 10px; overflow: hidden; background: var(--panel); color: var(--text); font-family: ui-monospace, SFMono-Regular, 'Cascadia Code', Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.55; }
+.editor.light { --ok: #15803d; --warn-c: #b45309; --err-c: #b91c1c; }
+.edtabs { display: flex; align-items: stretch; background: var(--bg); border-bottom: 1px solid var(--panel2); }
+.edtab { display: inline-flex; align-items: center; gap: 7px; padding: 7px 16px; background: var(--panel); border-top: 2px solid var(--accent); color: var(--text); }
+.edpath { padding: 7px 14px; align-self: center; }
+.edbody { position: relative; }
+.edpane { max-height: min(62vh, 640px); min-height: 160px; overflow: auto; padding: 6px 0; outline: none; overflow-anchor: auto; }
+.edjump { position: absolute; right: 22px; bottom: 12px; padding: 4px 12px; border-radius: 99px; background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-family: inherit; font-size: 12px; font-weight: 600; box-shadow: 0 4px 14px #0006; }
+.edpane:focus-visible { box-shadow: inset 0 0 0 1px var(--accent); }
+.edline { display: flex; align-items: baseline; }
+.edline:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.edline.error { background: color-mix(in srgb, var(--err-c) 11%, transparent); } .edline.warn { background: color-mix(in srgb, var(--warn-c) 9%, transparent); }
+.edline .ln { flex: none; width: 52px; padding-right: 14px; text-align: right; color: var(--dim); opacity: .7; user-select: none; }
+.edline:hover .ln { opacity: 1; color: var(--text); }
+.edline .code { flex: 1; min-width: 0; padding-right: 16px; white-space: pre; }
+.edpane.wrap .code { white-space: pre-wrap; overflow-wrap: anywhere; }
+.edempty { padding: 14px 20px; color: var(--dim); }
+.t-ts, .t-op { color: #858585; } .t-area { color: #c586c0; }
+.t-lv { font-weight: 700; } .t-lv.info { color: #61afef; } .t-lv.warn { color: #e5c07b; } .t-lv.error { color: #f48771; } .t-lv.debug { color: #7f848e; }
+.t-kw { color: #569cd6; font-weight: 600; } .t-path { color: #98c379; } .t-key { color: #9cdcfe; } .t-str { color: #ce9178; } .t-num { color: #b5cea8; } .t-val { color: var(--text); }
+.t-st.ok { color: #98c379; } .t-st.warn { color: #e5c07b; } .t-st.err { color: #f48771; }
+.editor.light .t-ts, .editor.light .t-op { color: #6e7781; } .editor.light .t-area { color: #af00db; }
+.editor.light .t-lv.info { color: #0b6bcb; } .editor.light .t-lv.warn { color: #946200; } .editor.light .t-lv.error { color: #c4281c; } .editor.light .t-lv.debug { color: #6e7781; }
+.editor.light .t-kw { color: #0033cc; } .editor.light .t-path { color: #116329; } .editor.light .t-key { color: #001080; } .editor.light .t-str { color: #a31515; } .editor.light .t-num { color: #098658; }
+.editor.light .t-st.ok { color: #116329; } .editor.light .t-st.warn { color: #946200; } .editor.light .t-st.err { color: #c4281c; }
+.edstatus { display: flex; align-items: center; gap: 18px; padding: 3px 14px; background: var(--accent); color: var(--on-accent); font-size: 11.5px; }
+.edstatus .spacer { flex: 1; }
+.edlive { font-weight: 700; }
+@media (max-width: 700px) { .edline .ln { width: 34px; padding-right: 8px; } .edpath { display: none; } .edstatus span:nth-child(n+5) { display: none; } }
 .manageopts { display: flex; flex-direction: column; gap: 8px; }
 .manageopts button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 10px 14px; }
 .manageopts button small { color: var(--dim); font-weight: 400; white-space: normal; }
@@ -657,7 +692,9 @@ button.wstat { cursor: pointer; }
 
 .hchips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .hchip { display: inline-flex; align-items: center; gap: 6px; border-radius: 99px; padding: 4px 12px; font-size: 13px; min-height: 0; }
-.hchip[aria-pressed=true] { border-color: var(--accent); color: var(--accent); }
+.hchip:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 10%, var(--panel)); border-color: color-mix(in srgb, var(--accent) 45%, var(--panel2)); }
+.hchip[aria-pressed=true] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--panel)); }
+.hchip[aria-pressed=true]:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 16%, var(--panel)); }
 .hopen { margin-bottom: 12px; }
 .cflow { user-select: none; -webkit-user-select: none; position: relative; margin-bottom: 8px; border-radius: 12px; background: radial-gradient(ellipse at 50% 30%, var(--panel2), var(--panel) 70%); border: 1px solid var(--panel2); overflow: hidden; }
 .recshead + .cflow { margin-top: 12px; } /* the heading and See all sit clear of it, as they do above a row of posters */
